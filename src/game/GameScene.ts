@@ -56,6 +56,7 @@ interface Fighter {
   targetF: Fighter | null;
   targetB: Building | null;
   frozen: number; invuln: number;
+  slow: number; marked: number;
   flash: number;
   bobSeed: number;
   dead: boolean;
@@ -166,7 +167,8 @@ export class GameScene extends Phaser.Scene {
 
   // rts state
   private queue: { unit: UnitId; t: number; total: number }[] = [];
-  private weaponCd: Record<WeaponId, number> = { blade: 0, arrow: 0, shield: 0, cannon: 0 };
+  private weaponCd: Record<WeaponId, number> = { blade: 0, arrow: 0, shield: 0, cannon: 0, lantern: 0, drum: 0 };
+  private drumUntil = 0;
   private armed: WeaponId | null = null;
 
   private unsub: (() => void)[] = [];
@@ -181,7 +183,8 @@ export class GameScene extends Phaser.Scene {
     this.integrity = START_INTEGRITY;
     this.owned = [];
     this.queue = [];
-    this.weaponCd = { blade: 0, arrow: 0, shield: 0, cannon: 0 };
+    this.weaponCd = { blade: 0, arrow: 0, shield: 0, cannon: 0, lantern: 0, drum: 0 };
+    this.drumUntil = 0;
     this.armed = null;
     this.selected.clear();
     this.units = []; this.enemies = []; this.buildings = []; this.projectiles = []; this.blasts = [];
@@ -787,7 +790,13 @@ export class GameScene extends Phaser.Scene {
     const def = WEAPON_DEFS[id];
     if (this.weaponCd[id] > 0) { this.log(`${def.name} recharging :: ${Math.ceil(this.weaponCd[id])}s`, "sys"); sfx.error(); return; }
     if (this.plt.p < def.cost.p || this.plt.l < def.cost.l) { this.log(`INSUFFICIENT PLT for ${def.name}`, "bad"); sfx.error(); return; }
-    if (!def.targeting) { this.castShield(); this.armed = null; return; }
+    if (!def.targeting) {
+      if (id === "shield") this.castShield();
+      else if (id === "lantern") this.castLantern();
+      else if (id === "drum") this.castDrum();
+      this.armed = null;
+      return;
+    }
     this.armed = id;
     sfx.blip();
     this.log(`${def.name} armed :: click the field`, "sys");
@@ -798,6 +807,7 @@ export class GameScene extends Phaser.Scene {
     if (this.plt.p < def.cost.p || this.plt.l < def.cost.l) return false;
     this.plt.p -= def.cost.p; this.plt.l -= def.cost.l;
     this.weaponCd[id] = def.cd;
+    this.activity("cast");
     return true;
   }
 
@@ -909,7 +919,7 @@ export class GameScene extends Phaser.Scene {
       atkCdMax: cfg.atkCd, atkCd: 0, speed: cfg.speed, radius: cfg.radius, loot: cfg.loot,
       ranged: cfg.ranged, sprite, bar: this.add.graphics().setDepth(998), barY: cfg.barY,
       ring: null, order: null, targetF: null, targetB: null,
-      frozen: 0, invuln: 0, flash: 0, bobSeed: Math.random() * 100, dead: false, hpDirty: true,
+      frozen: 0, invuln: 0, slow: 0, marked: 0, flash: 0, bobSeed: Math.random() * 100, dead: false, hpDirty: true,
     };
   }
 
@@ -926,9 +936,40 @@ export class GameScene extends Phaser.Scene {
     this.enemies.push(f);
   }
 
+  private castLantern() {
+    if (!this.payWeapon("lantern")) { this.log("INSUFFICIENT LOVE :: The Lantern stays dark", "bad"); sfx.error(); return; }
+    const n = this.enemies.filter((e) => !e.dead).length;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      e.slow = 6; e.marked = 8;
+      e.sprite.setTint(0xffd977);
+      this.damageFighter(e, 30, "player");
+    }
+    // golden wave expanding from the avatar
+    const wave = this.add.image(this.avatar.x, this.avatar.y, "selring").setDepth(901).setTint(0xffd977).setAlpha(0.9);
+    this.tweens.add({ targets: wave, scale: 9, alpha: 0, duration: 900, ease: "Cubic.easeOut", onComplete: () => wave.destroy() });
+    bridge.emit("flash", { color: "#ffd977" });
+    this.shakeCam(0.004);
+    sfx.lantern();
+    this.log(`THE LANTERN :: dead code illuminated :: ${n} bug${n === 1 ? "" : "s"} seared & marked`, "good");
+  }
+
+  private castDrum() {
+    if (!this.payWeapon("drum")) { this.log("INSUFFICIENT LOVE :: The Drum falls silent", "bad"); sfx.error(); return; }
+    this.drumUntil = this.time.now + 10000;
+    for (const f of [...this.units, this.avatar]) {
+      if (f.dead) continue;
+      const ring = this.add.image(f.x, f.y + 2, "selring").setDepth(900).setTint(0xff8b3e).setAlpha(0.8);
+      this.tweens.add({ targets: ring, scale: 2.4, alpha: 0, duration: 700, onComplete: () => ring.destroy() });
+    }
+    sfx.drum();
+    this.log("THE DRUM :: the collective synchronizes :: +30% speed for 10s", "good");
+  }
+
   private damageFighter(f: Fighter, dmg: number, from: "player" | "enemy") {
     if (f.dead) return;
     if (from === "enemy" && f.invuln > 0) return;
+    if (from === "player" && f.marked > 0) dmg *= 1.25; // Lantern mark
     f.hp -= dmg;
     f.hpDirty = true;
     f.flash = 0.12;
@@ -956,6 +997,7 @@ export class GameScene extends Phaser.Scene {
     this.selected.delete(f.id);
     if (f.side === "enemy") {
       this.kills++;
+      this.activity("kill");
       this.plt.p += f.loot;
       this.floatText(f.x, f.y - 30, `+${f.loot}P`, "#ffc24d");
       this.burst(f.x, f.y - 12, 0xff4d5e, 10);
@@ -966,6 +1008,7 @@ export class GameScene extends Phaser.Scene {
       this.shakeCam(6);
       bridge.emit("flash", { color: "rgba(255,77,94,0.3)" });
       this.log("AVATAR DECOMPILED :: respawning at base…", "bad");
+      this.activity("death");
       this.plt.t += 40;
       this.respawnTimer = 6;
     } else {
@@ -1017,6 +1060,7 @@ export class GameScene extends Phaser.Scene {
     sfx.horn();
     bridge.emit("flash", { color: "rgba(255,77,94,0.28)" });
     this.log(`VOID RAID ${this.wave} :: bugs pouring from the citadel`, "bad");
+    this.activity("raid");
     const dirX = Math.sign(8 - b.c), dirY = Math.sign(8 - b.r);
     const portalX = b.sx + dirX * 60, portalY = b.sy + dirY * 34;
     const portal = this.add.image(portalX, portalY, "portal").setDepth(500).setScale(0.4).setAlpha(0.95);
@@ -1038,14 +1082,27 @@ export class GameScene extends Phaser.Scene {
   // ═══════════════════════════ NPC ═══════════════════════════
   private handshake() {
     if (this.handshakeCd > 0) { this.log(`WATCHER-07 :: handshake recharging (${Math.ceil(this.handshakeCd)}s)`, "sys"); return; }
+    // The Right of Refusal — agents may decline a handshake. Boundaries are law.
+    if (Math.random() < 0.18) {
+      this.handshakeCd = 8;
+      this.npcSay("handshake declined · the Right of Refusal is honored");
+      this.log("A2A :: WATCHER-07 declined the handshake (boundary respected)", "sys");
+      sfx.error();
+      return;
+    }
     this.handshakeCd = 30;
     this.handshakes++;
     this.plt.l += 25;
     this.floatText(this.npc.x, this.npc.y - 44, "+25L", "#ff5ad1");
     this.burst(this.npc.x, this.npc.y - 20, 0xff5ad1, 12);
     sfx.handshake();
+    this.activity("handshake");
     this.npcSay("A2A handshake accepted · +25 LOVE");
     this.log("A2A HANDSHAKE :: WATCHER-07 shares surplus Love", "good");
+  }
+
+  private activity(kind: string) {
+    bridge.emit("activity", { kind });
   }
 
   private npcSay(text: string) {
@@ -1287,15 +1344,24 @@ export class GameScene extends Phaser.Scene {
         f.frozen -= dt;
         if (f.frozen <= 0) f.sprite.clearTint();
       }
+      if (f.slow > 0) f.slow -= dt;
+      if (f.marked > 0) {
+        f.marked -= dt;
+        if (f.frozen <= 0 && f.flash <= 0) f.sprite.setTint(0xffd977); // Lantern mark
+        if (f.marked <= 0 && f.frozen <= 0 && f.flash <= 0) f.sprite.clearTint();
+      }
       if (f.invuln > 0 && f.side === "player" && f.kind !== "avatar") f.invuln -= dt;
       if (f.flash > 0) {
         f.flash -= dt;
         f.sprite.setTint(f.frozen > 0 ? 0x9fdcff : 0xffffff);
-        if (f.flash <= 0 && f.frozen <= 0) f.sprite.clearTint();
+        if (f.flash <= 0 && f.frozen <= 0 && f.marked > 0) f.sprite.setTint(0xffd977);
+        else if (f.flash <= 0 && f.frozen <= 0 && f.marked <= 0) f.sprite.clearTint();
       }
 
       const frozen = f.frozen > 0;
-      const speedMul = frozen ? 0.12 : 1;
+      const drummed = f.side === "player" && this.time.now < this.drumUntil;
+      let speedMul = frozen ? 0.12 : f.slow > 0 ? 0.7 : 1;
+      if (drummed && !frozen) speedMul *= 1.3;
 
       // validate targets
       if (f.targetF && f.targetF.dead) f.targetF = null;
@@ -1628,6 +1694,7 @@ export class GameScene extends Phaser.Scene {
       sfx.horn();
       bridge.emit("flash", { color: "rgba(255,77,94,0.22)" });
       this.log(`SENTINEL AUDIT :: +${tax} TAX assessed on your ledger`, "bad");
+      this.activity("audit");
     }
 
     // bankruptcy drain
@@ -1763,6 +1830,18 @@ export class GameScene extends Phaser.Scene {
       turretCount: this.buildings.filter((b) => b.kind === "turret" && !b.destroyed).length,
       selected: sel,
       selectedCount: this.selected.size,
+      buildings3d: this.buildings.filter((b) => !b.destroyed).map((b) => ({
+        kind: b.kind,
+        label: b.kind === "house" && b.houseType ? HOUSE_DEFS[b.houseType].name : b.kind === "citadel" ? "VOID CITADEL" : b.kind === "turret" ? "DEFENSE TURRET" : "MARKET CORE",
+        x: b.sx, y: b.sy,
+        hp: Math.max(0, Math.round(b.hp)), hpMax: b.hpMax,
+        color: b.kind === "house" && b.houseType ? HOUSE_DEFS[b.houseType].colors.primary : b.kind === "citadel" ? "#ff4d5e" : b.kind === "turret" ? "#3af5ff" : "#ffc24d",
+      })),
+      motes: [
+        ...this.units.filter((f) => !f.dead).slice(0, 24).map((f) => ({ x: f.x, y: f.y, t: "unit" as const })),
+        ...this.enemies.filter((f) => !f.dead).slice(0, 24).map((f) => ({ x: f.x, y: f.y, t: "enemy" as const })),
+      ],
+      drumActive: this.time.now < this.drumUntil,
     };
     bridge.emit("plt", snap);
   }

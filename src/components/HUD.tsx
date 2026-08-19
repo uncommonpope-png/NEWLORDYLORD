@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { PltSnapshot, RESOURCE_META, fmt, HOUSE_DEFS, OBJECTIVE, WEAPON_DEFS, UNIT_DEFS, TURRET_COST, TURRET_MAX, WeaponId, UnitId } from "../game/bridge";
 
@@ -40,9 +41,81 @@ const UnitIcon = ({ kind, s = 22 }: { kind: UnitId; s?: number }) => {
   );
 };
 
+const IconLantern = ({ s = 26 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="#ffd977" strokeWidth="1.6">
+    <path d="M12 3l5 7-5 7-5-7z" fill="#ffd97722" />
+    <path d="M12 6v11M9.5 7.5h5" />
+    <path d="M12 1v1M12 22v1M2 10h1.5M20.5 10H22" strokeWidth="1.2" />
+  </svg>
+);
+const IconDrum = ({ s = 26 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="#ff8b3e" strokeWidth="1.6">
+    <ellipse cx="12" cy="7" rx="8" ry="3" fill="#ff8b3e22" />
+    <path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7" />
+    <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" strokeWidth="1.1" />
+    <path d="M9 2l3 5M15 2l-3 5" strokeWidth="1.2" />
+  </svg>
+);
+
 const WEAPON_ICONS: Record<WeaponId, (p: { s?: number }) => ReactElement> = {
-  blade: IconBlade, arrow: IconArrow, shield: IconShield, cannon: IconCannon,
+  blade: IconBlade, arrow: IconArrow, shield: IconShield, cannon: IconCannon, lantern: IconLantern, drum: IconDrum,
 };
+
+// ── minimap (phase 8) ────────────────────────────────────────────────
+const MM_W = 176, MM_H = 104;
+const mmx = (x: number) => ((x + 560) / 1120) * MM_W;
+const mmy = (y: number) => ((y + 90) / 660) * MM_H;
+
+export function Minimap({ snap }: { snap: PltSnapshot }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, MM_W, MM_H);
+    ctx.fillStyle = "rgba(4,6,15,0.82)";
+    ctx.fillRect(0, 0, MM_W, MM_H);
+    // safe-zone diamond
+    ctx.beginPath();
+    ctx.moveTo(mmx(0), mmy(0));
+    ctx.lineTo(mmx(480), mmy(240));
+    ctx.lineTo(mmx(0), mmy(480));
+    ctx.lineTo(mmx(-480), mmy(240));
+    ctx.closePath();
+    ctx.fillStyle = "rgba(34,60,40,0.55)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(58,245,255,0.55)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // structures
+    for (const b of snap.buildings3d) {
+      ctx.fillStyle = b.color;
+      if (b.kind === "citadel") {
+        ctx.save();
+        ctx.translate(mmx(b.x), mmy(b.y));
+        ctx.rotate(Math.PI / 4);
+        ctx.fillRect(-3.5, -3.5, 7, 7);
+        ctx.restore();
+      } else {
+        ctx.fillRect(mmx(b.x) - 2, mmy(b.y) - 2, 4, 4);
+      }
+    }
+    // motes
+    for (const m of snap.motes) {
+      ctx.fillStyle = m.t === "unit" ? "#3af5ff" : "#ff4d5e";
+      ctx.fillRect(mmx(m.x) - 1, mmy(m.y) - 1, 2.4, 2.4);
+    }
+  }, [snap]);
+  return (
+    <div className="absolute bottom-3 right-3 z-10 pointer-events-none">
+      <div className="holo-panel-sm p-1.5">
+        <canvas ref={ref} width={MM_W} height={MM_H} className="block" />
+        <div className="font-mono text-[8px] text-[#42557f] tracking-[0.25em] text-center mt-1">GENESIS GRID · 16×16</div>
+      </div>
+    </div>
+  );
+}
 
 // ── resource readout ─────────────────────────────────────────────────
 const rate = (r: number) => (r >= 0 ? `+${r.toFixed(1)}` : r.toFixed(1));

@@ -2,10 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { mountGame } from "./game/main";
 import { bridge, BridgeCommands, PltSnapshot, EndStats, HouseId, UnitId, WeaponId } from "./game/bridge";
 import { sfx } from "./game/audio";
-import { TopBar, PromptBar, LogPanel, Hotbar, WarPanel, SelectionPanel, WaveBanner, LogEntry } from "./components/HUD";
+import { TopBar, PromptBar, LogPanel, Hotbar, WarPanel, SelectionPanel, WaveBanner, Minimap, LogEntry } from "./components/HUD";
 import { BootScreen, HouseSelect, MarketTerminal, PauseScreen, EndScreen } from "./components/Overlays";
+import { TerminalShell } from "./components/TerminalShell";
+import { mountCommandCenter } from "./game/CommandCenter";
+import type { CC3DHandle, HoverInfo } from "./game/CommandCenter";
 
 type Screen = "boot" | "select" | "game";
+type View = "arena" | "command";
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,6 +23,11 @@ export default function App() {
   const [ended, setEnded] = useState<EndStats | null>(null);
   const [wave, setWave] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [view, setView] = useState<View>("arena");
+  const [shellOpen, setShellOpen] = useState(false);
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
+  const ccMountRef = useRef<HTMLDivElement>(null);
+  const ccHandleRef = useRef<CC3DHandle | null>(null);
 
   // mount Phaser once
   useEffect(() => {
