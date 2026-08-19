@@ -1,25 +1,21 @@
 import Phaser from "phaser";
 import { GameScene } from "./GameScene";
-import { sfx } from "./audio";
 
-export function initGame(parent: HTMLElement): Phaser.Game {
+export function mountGame(parent: HTMLElement): Phaser.Game {
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
+    width: window.innerWidth,
+    height: window.innerHeight,
     backgroundColor: "#04060f",
+    pixelArt: false,
+    antialias: true,
     scale: {
       mode: Phaser.Scale.RESIZE,
-      width: "100%",
-      height: "100%",
+      autoCenter: Phaser.Scale.CENTER_BOTH,
     },
     scene: [GameScene],
-    audio: { disableWebAudio: false },
-    render: { antialias: true, pixelArt: false },
+    banner: false,
   });
   return game;
-}
-
-export function destroyGame(game: Phaser.Game) {
-  sfx.stopAll();
-  game.destroy(true);
 }

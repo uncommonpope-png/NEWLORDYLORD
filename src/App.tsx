@@ -1,115 +1,166 @@
-import { useEffect, useRef, useState } from "react";
-import type Phaser from "phaser";
-import { initGame, destroyGame } from "./game/main";
-import { bridge, PltSnapshot, LogEntry, EndStats, HouseId } from "./game/bridge";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { mountGame } from "./game/main";
+import { bridge, BridgeCommands, PltSnapshot, EndStats, HouseId, UnitId, WeaponId } from "./game/bridge";
 import { sfx } from "./game/audio";
-import { HUD } from "./components/HUD";
+import { TopBar, PromptBar, LogPanel, Hotbar, WarPanel, SelectionPanel, WaveBanner, LogEntry } from "./components/HUD";
 import { BootScreen, HouseSelect, MarketTerminal, PauseScreen, EndScreen } from "./components/Overlays";
 
-type Phase = "boot" | "select" | "game";
+type Screen = "boot" | "select" | "game";
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const gameRef = useRef<Phaser.Game | null>(null);
-  const [phase, setPhase] = useState<Phase>("boot");
+  const [screen, setScreen] = useState<Screen>("boot");
   const [snap, setSnap] = useState<PltSnapshot | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [prompt, setPrompt] = useState<string | null>(null);
+  const [flash, setFlash] = useState<{ color: string; key: number } | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [end, setEnd] = useState<EndStats | null>(null);
+  const [ended, setEnded] = useState<EndStats | null>(null);
+  const [wave, setWave] = useState(0);
   const [muted, setMuted] = useState(false);
-  const [flash, setFlash] = useState<{ color: string; key: number } | null>(null);
 
-  // mount Phaser
+  // mount Phaser once
   useEffect(() => {
-    if (!containerRef.current || gameRef.current) return;
-    gameRef.current = initGame(containerRef.current);
-    const offs = [
-      bridge.on("state", setSnap),
-      bridge.on("log", (l) => setLogs((prev) => [...prev.slice(-5), l])),
-      bridge.on("prompt", setPrompt),
-      bridge.on("terminal", setTerminalOpen),
-      bridge.on("paused", setPaused),
-      bridge.on("flash", (c) => setFlash({ color: c, key: Date.now() + Math.random() })),
-      bridge.on("end", (e) => { setEnd(e); setTerminalOpen(false); setPaused(false); }),
-    ];
-    return () => {
-      offs.forEach((off) => off());
-      if (gameRef.current) {
-        destroyGame(gameRef.current);
-        gameRef.current = null;
-      }
-    };
+    if (!containerRef.current) return;
+    const game = mountGame(containerRef.current);
+    return () => game.destroy(true);
   }, []);
 
-  // overlay keyboard (close terminal, sync mute)
+  // bridge subscriptions
+  useEffect(() => {
+    const offs = [
+      bridge.on("plt", (s) => setSnap(s)),
+      bridge.on("log", (l) => setLogs((prev) => [...prev.slice(-6), l])),
+      bridge.on("prompt", (p) => setPrompt(p)),
+      bridge.on("flash", (f) => setFlash({ ...f, key: Date.now() })),
+      bridge.on("terminal", (open) => setTerminalOpen(open)),
+      bridge.on("paused", (p) => setPaused(p)),
+      bridge.on("started", () => setScreen((s) => (s === "boot" ? s : "game"))),
+      bridge.on("wave", (w) => setWave(w.n)),
+      bridge.on("end", (stats) => setEnded(stats)),
+    ];
+    return () => offs.forEach((off) => off());
+  }, []);
+
+  const gameCommand = useCallback(<K extends keyof BridgeCommands>(cmd: K, payload: BridgeCommands[K]) => {
+    bridge.command(cmd, payload);
+  }, []);
+
+  // start → house select
+  const startGame = () => {
+    sfx.ensure();
+    sfx.blip();
+    setScreen("select");
+  };
+  const claimHouse = (house: HouseId) => {
+    sfx.purchase();
+    gameCommand("claim", { house });
+    setScreen("game");
+  };
+
+  // keyboard: pause / mute / escape from terminal
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (terminalOpen && (e.key === "Escape" || e.key.toLowerCase() === "e")) {
-        e.preventDefault();
-        sfx.ui();
-        bridge.emit("terminal", false);
+      if (e.key === "Escape" && terminalOpen) {
+        setTerminalOpen(false);
+        gameCommand("terminal", false);
       }
-      if (e.key.toLowerCase() === "m") setTimeout(() => setMuted(sfx.isMuted()), 30);
+      if ((e.key === "m" || e.key === "M") && screen === "game") {
+        setMuted((m) => {
+          sfx.setMuted(!m);
+          return !m;
+        });
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [terminalOpen]);
+  }, [terminalOpen, screen, gameCommand]);
 
-  const startBoot = () => {
-    sfx.init();
-    sfx.ui();
-    setPhase("select");
+  const reboot = () => {
+    setSnap(null);
+    setLogs([]);
+    setPrompt(null);
+    setTerminalOpen(false);
+    setPaused(false);
+    setEnded(null);
+    setWave(0);
+    setScreen("boot");
+    sfx.blip();
+    gameCommand("reboot", {});
   };
 
-  const claim = (id: HouseId) => {
-    sfx.ui();
-    bridge.emit("spawn", id);
-    setPhase("game");
-  };
-
-  const reboot = () => window.location.reload();
+  const danger = !!snap?.danger;
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-[#04060f] font-body">
+    <div
+      className="fixed inset-0 overflow-hidden bg-[#04060f] select-none"
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ cursor: snap?.armed ? "crosshair" : undefined }}
+    >
       {/* Phaser canvas */}
-      <div ref={containerRef} className="absolute inset-0 cursor-crosshair" />
+      <div ref={containerRef} className="absolute inset-0" />
 
       {/* CRT dressing */}
-      <div className="scanlines absolute inset-0 z-40" />
-      <div className="crt-vignette absolute inset-0 z-40" />
-      {snap?.danger && phase === "game" && !end && <div className="alarm-vignette absolute inset-0 z-30" />}
-      {flash && <div key={flash.key} className="screen-flash absolute inset-0 z-30" style={{ background: flash.color }} />}
+      <div className="scanlines absolute inset-0 z-[15]" />
+      <div className="crt-vignette absolute inset-0 z-[14]" />
+      {danger && screen === "game" && !ended && <div className="alarm-vignette absolute inset-0 z-[13]" />}
+      {flash && <div key={flash.key} className="screen-flash absolute inset-0 z-[16]" style={{ background: flash.color }} />}
 
       {/* HUD */}
-      {phase === "game" && snap && !end && (
-        <HUD
+      {screen === "game" && snap && !ended && (
+        <>
+          <TopBar snap={snap} />
+          <LogPanel logs={logs} />
+          <WarPanel snap={snap} />
+          <SelectionPanel snap={snap} />
+          <Hotbar
+            snap={snap}
+            onArm={(id: WeaponId | null) => gameCommand("arm", { id })}
+            onProd={(id: UnitId) => gameCommand("prod", { unit: id })}
+            onTurret={() => gameCommand("buildTurret", {})}
+          />
+          <PromptBar prompt={prompt} />
+          <WaveBanner wave={wave} />
+        </>
+      )}
+
+      {/* overlays */}
+      {screen === "boot" && <BootScreen onStart={startGame} />}
+      {screen === "select" && <HouseSelect onClaim={claimHouse} />}
+      {screen === "game" && terminalOpen && snap && !ended && (
+        <MarketTerminal
           snap={snap}
-          logs={logs}
-          prompt={prompt}
-          muted={muted}
-          onPause={() => (paused ? bridge.emit("resume", undefined) : bridge.emit("pause", undefined))}
-          onMute={() => { sfx.setMuted(!sfx.isMuted()); setMuted(sfx.isMuted()); }}
+          onClose={() => { setTerminalOpen(false); gameCommand("terminal", false); }}
+          onBuy={(house) => gameCommand("buy", { house })}
+          onDeposit={(d) => gameCommand("deposit", d)}
+          onSettle={() => gameCommand("settle", {})}
+        />
+      )}
+      {screen === "game" && paused && !ended && (
+        <PauseScreen
+          onResume={() => gameCommand("resume", {})}
+          onReboot={reboot}
+        />
+      )}
+      {ended && (
+        <EndScreen
+          stats={ended}
+          onReboot={reboot}
+          onSandbox={() => { setEnded(null); gameCommand("sandbox", {}); }}
         />
       )}
 
-      {/* screens */}
-      {phase === "boot" && <BootScreen onStart={startBoot} />}
-      {phase === "select" && <HouseSelect onClaim={claim} />}
-      {phase === "game" && terminalOpen && snap && !end && (
-        <MarketTerminal
-          snap={snap}
-          onClose={() => { sfx.ui(); bridge.emit("terminal", false); }}
-          onBuy={(id) => bridge.emit("buy", id)}
-          onDeposit={(d) => bridge.emit("deposit", d)}
-          onSettle={() => bridge.emit("settle", undefined)}
-        />
+      {/* mute chip */}
+      {screen === "game" && (
+        <button
+          onClick={() => { setMuted((m) => { sfx.setMuted(!m); return !m; }); }}
+          className="absolute top-3 right-4 z-10 font-mono text-[9px] px-2 py-1 border border-[#1c2c52] text-[#6f86b8] hover:text-[#9fdcff] hover:border-[#3af5ff55] transition-colors cursor-pointer bg-[rgba(6,10,24,0.7)]"
+          style={{ marginTop: 64 }}
+        >
+          [M] {muted ? "SOUND OFF" : "SOUND ON"}
+        </button>
       )}
-      {phase === "game" && paused && !terminalOpen && !end && (
-        <PauseScreen onResume={() => bridge.emit("resume", undefined)} onReboot={reboot} />
-      )}
-      {end && <EndScreen stats={end} onReboot={reboot} onSandbox={() => { bridge.emit("sandbox", undefined); setEnd(null); }} />}
     </div>
   );
 }

@@ -1,143 +1,327 @@
-import { fmt, OBJECTIVE, PltSnapshot, LogEntry, RESOURCE_META } from "../game/bridge";
+import type { ReactElement, ReactNode } from "react";
+import { PltSnapshot, RESOURCE_META, fmt, HOUSE_DEFS, OBJECTIVE, WEAPON_DEFS, UNIT_DEFS, TURRET_COST, TURRET_MAX, WeaponId, UnitId } from "../game/bridge";
 
-const IconP = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1 13 7 7 13 1 7Z" fill="none" stroke="#ffc24d" strokeWidth="1.6" /><circle cx="7" cy="7" r="2" fill="#ffc24d" /></svg>
-);
-const IconL = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 12.5 1.8 7.3a3.2 3.2 0 0 1 0-4.5 3 3 0 0 1 4.4 0L7 3.6l.8-.8a3 3 0 0 1 4.4 0 3.2 3.2 0 0 1 0 4.5Z" fill="#ff5ad1" /></svg>
-);
-const IconT = () => (
-  <svg width="14" height="14" viewBox="0 0 14 14"><path d="M8 1 3 8h3l-1 5 6-8H8Z" fill="none" stroke="#ff4d5e" strokeWidth="1.5" strokeLinejoin="round" /></svg>
-);
+export type LogEntry = { msg: string; tone: "good" | "bad" | "sys" };
 
-function rate(r: number) {
-  const v = Math.round(r * 10) / 10;
-  return v >= 0 ? `+${v}` : `${v}`;
-}
+// ── inline SVG icons (no emoji) ──────────────────────────────────────
+const IconP = ({ s = 15 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 16 16"><polygon points="8,1 15,8 8,15 1,8" fill="none" stroke="#ffc24d" strokeWidth="1.6" /><circle cx="8" cy="8" r="2.4" fill="#ffc24d" /></svg>
+);
+const IconL = ({ s = 15 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 16 16"><path d="M8 14 C3 10 1.5 6.5 3.5 4 C5.5 1.8 8 3.5 8 5 C8 3.5 10.5 1.8 12.5 4 C14.5 6.5 13 10 8 14 Z" fill="none" stroke="#ff5ad1" strokeWidth="1.5" /></svg>
+);
+const IconT = ({ s = 15 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" fill="none" stroke="#ff4d5e" strokeWidth="1.6" /><line x1="2" y1="8" x2="14" y2="8" stroke="#ff4d5e" strokeWidth="1.4" /></svg>
+);
+const IconBlade = ({ s = 22 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24"><path d="M3 21 L14 10 L17 3 L21 7 L14 10 L3 21 Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><line x1="6" y1="15" x2="9" y2="18" stroke="currentColor" strokeWidth="1.7" /></svg>
+);
+const IconArrow = ({ s = 22 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /><line x1="12" y1="1" x2="12" y2="5" stroke="currentColor" strokeWidth="1.7" /><line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="1.7" /><line x1="1" y1="12" x2="5" y2="12" stroke="currentColor" strokeWidth="1.7" /><line x1="19" y1="12" x2="23" y2="12" stroke="currentColor" strokeWidth="1.7" /></svg>
+);
+const IconShield = ({ s = 22 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24"><path d="M12 2 L20 6 V12 C20 17 16.5 20.5 12 22 C7.5 20.5 4 17 4 12 V6 Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><line x1="12" y1="7" x2="12" y2="15" stroke="currentColor" strokeWidth="1.7" /><line x1="8" y1="11" x2="16" y2="11" stroke="currentColor" strokeWidth="1.7" /></svg>
+);
+const IconCannon = ({ s = 22 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="currentColor" /><line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" strokeWidth="1.8" /><line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" strokeWidth="1.8" /><line x1="2" y1="12" x2="6" y2="12" stroke="currentColor" strokeWidth="1.8" /><line x1="18" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="1.8" /><line x1="5" y1="5" x2="8" y2="8" stroke="currentColor" strokeWidth="1.8" /><line x1="16" y1="16" x2="19" y2="19" stroke="currentColor" strokeWidth="1.8" /><line x1="19" y1="5" x2="16" y2="8" stroke="currentColor" strokeWidth="1.8" /><line x1="8" y1="16" x2="5" y2="19" stroke="currentColor" strokeWidth="1.8" /></svg>
+);
+const IconTurret = ({ s = 22 }: { s?: number }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24"><path d="M4 21 L20 21 L17 14 L7 14 Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><rect x="10" y="4" width="4" height="10" fill="none" stroke="currentColor" strokeWidth="1.7" /><circle cx="12" cy="3" r="1.6" fill="currentColor" /></svg>
+);
+const UnitIcon = ({ kind, s = 22 }: { kind: UnitId; s?: number }) => {
+  if (kind === "knight") return (
+    <svg width={s} height={s} viewBox="0 0 24 24"><path d="M5 20 L5 8 L12 3 L19 8 L19 20 Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="1.5" /><line x1="12" y1="12" x2="12" y2="20" stroke="currentColor" strokeWidth="1.5" /></svg>
+  );
+  if (kind === "lancer") return (
+    <svg width={s} height={s} viewBox="0 0 24 24"><path d="M6 21 C6 10 10 5 20 3 C15 8 14 14 13 21 Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /><line x1="3" y1="21" x2="21" y2="3" stroke="currentColor" strokeWidth="1.3" /></svg>
+  );
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" /><rect x="8" y="3" width="8" height="4" fill="none" stroke="currentColor" strokeWidth="1.7" /><rect x="9.5" y="11" width="5" height="5" fill="currentColor" /></svg>
+  );
+};
+
+const WEAPON_ICONS: Record<WeaponId, (p: { s?: number }) => ReactElement> = {
+  blade: IconBlade, arrow: IconArrow, shield: IconShield, cannon: IconCannon,
+};
+
+// ── resource readout ─────────────────────────────────────────────────
+const rate = (r: number) => (r >= 0 ? `+${r.toFixed(1)}` : r.toFixed(1));
 
 export function ResourceReadout({ res, value, r }: { res: "p" | "l" | "t"; value: number; r: number }) {
   const meta = RESOURCE_META[res];
-  // for PROFIT/LOVE, negative flow is bad; for TAX, positive accumulation is bad
   const rateColor = res === "t" ? (r > 0 ? "#ff4d5e" : "#6bff9e") : r < 0 ? "#ff4d5e" : "#6f86b8";
   return (
     <div className="holo-panel-sm flex items-center gap-2.5 px-3 py-1.5 min-w-[118px]">
       <span className="shrink-0">{res === "p" ? <IconP /> : res === "l" ? <IconL /> : <IconT />}</span>
       <div className="leading-none">
         <div className="font-mono text-[15px] font-semibold" style={{ color: meta.color }}>{fmt(value)}</div>
-        <div className="font-mono text-[9px] mt-0.5" style={{ color: rateColor }}>
-          {meta.label} {rate(r)}/s
+        <div className="font-mono text-[9px] mt-0.5" style={{ color: rateColor }}>{meta.label} {rate(r)}/s</div>
+      </div>
+    </div>
+  );
+}
+
+// ── top bar ──────────────────────────────────────────────────────────
+const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+export function TopBar({ snap }: { snap: PltSnapshot }) {
+  const netWorth = snap.p + snap.l;
+  const integrityColor = snap.integrity > 55 ? "#6bff9e" : snap.integrity > 25 ? "#ffc24d" : "#ff4d5e";
+  return (
+    <div className="absolute top-0 inset-x-0 z-10 pointer-events-none">
+      <div className="flex items-start gap-3 px-4 pt-3">
+        <div className="holo-panel px-4 py-2 flex items-center gap-3">
+          <span className="font-display text-[15px] text-[#3af5ff] leading-none" style={{ textShadow: "0 0 12px rgba(58,245,255,.6)" }}>SOULFEILD</span>
+          <span className="font-mono text-[9px] text-[#6f86b8] leading-tight">GENESIS<br />ARENA</span>
+        </div>
+        <ResourceReadout res="p" value={snap.p} r={snap.pRate} />
+        <ResourceReadout res="l" value={snap.l} r={snap.lRate} />
+        <ResourceReadout res="t" value={snap.t} r={snap.tRate} />
+
+        <div className="flex-1" />
+
+        <div className="holo-panel-sm px-3 py-2 text-right">
+          <div className="font-mono text-[10px] text-[#6f86b8]">BASE INTEGRITY</div>
+          <div className="w-[150px] h-[8px] mt-1 bg-[#0a1226] border border-[#1c2c52]">
+            <div className="h-full transition-all duration-300" style={{ width: `${snap.integrity}%`, background: integrityColor, boxShadow: `0 0 8px ${integrityColor}` }} />
+          </div>
+          {snap.danger && <div className="font-mono text-[9px] text-[#ff4d5e] mt-1 animate-pulse">BANKRUPTCY :: INTEGRITY DRAINING</div>}
+        </div>
+
+        <div className="holo-panel-sm px-3 py-2 text-right">
+          <div className="font-mono text-[10px] text-[#6f86b8]">OBJECTIVE</div>
+          <div className="font-mono text-[10px] text-[#cfe3ff] mt-0.5 leading-tight">
+            <span style={{ color: snap.owned >= OBJECTIVE.housesNeeded ? "#6bff9e" : "#ffc24d" }}>{snap.owned}/{OBJECTIVE.housesNeeded} HOUSES</span>
+            {" · "}
+            <span style={{ color: netWorth >= OBJECTIVE.netWorthNeeded ? "#6bff9e" : "#ffc24d" }}>{fmt(netWorth)}/{fmt(OBJECTIVE.netWorthNeeded)} PLT</span>
+          </div>
+          <div className="font-mono text-[10px] mt-0.5 leading-tight" style={{ color: snap.citadels.every((c) => c.hp <= 0) ? "#6bff9e" : "#ff4d5e" }}>
+            OR PURGE {snap.citadels.filter((c) => c.hp > 0).length} CITADELS
+          </div>
+        </div>
+
+        <div className="holo-panel-sm px-3 py-2 text-center">
+          <div className="font-mono text-[15px] text-[#9fdcff]">{fmtTime(snap.timePlayed)}</div>
+          <div className="font-mono text-[8.5px] text-[#6f86b8]">T+{snap.owned > 0 ? "LIVE" : "BOOT"}</div>
         </div>
       </div>
     </div>
   );
 }
 
-interface HUDProps {
-  snap: PltSnapshot;
-  logs: LogEntry[];
-  prompt: string | null;
-  muted: boolean;
-  onPause: () => void;
-  onMute: () => void;
-}
+// ── log feed (right side) ────────────────────────────────────────────
+const TONE_COLOR: Record<LogEntry["tone"], string> = { sys: "#ffc24d", good: "#6bff9e", bad: "#ff4d5e" };
 
-export function HUD({ snap, logs, prompt, muted, onPause, onMute }: HUDProps) {
-  const netGoal = OBJECTIVE.netWorthNeeded;
-  const netPct = Math.max(0, Math.min(100, (snap.netWorth / netGoal) * 100));
-  const toneColor = { info: "#9fdcff", good: "#6bff9e", bad: "#ff4d5e", sys: "#ffc24d" } as const;
-
+export function LogPanel({ logs }: { logs: LogEntry[] }) {
   return (
-    <>
-      {/* top bar */}
-      <div className="absolute top-0 left-0 right-0 z-10 flex items-start gap-3 p-3 pointer-events-none">
-        <div className="holo-panel-sm px-3 py-2 leading-none pointer-events-auto">
-          <div className="font-display text-[13px] text-[#3af5ff] tracking-wide">SOULFEILD</div>
-          <div className="font-mono text-[8.5px] text-[#6f86b8] mt-1">SPATIAL OS // PHASE 05 · GENESIS PLOT</div>
+    <div className="absolute right-4 top-[92px] z-10 w-[300px] pointer-events-none space-y-1">
+      {logs.map((l, i) => (
+        <div key={`${i}-${l.msg}`} className="log-line font-mono text-[10px] leading-snug px-2 py-1 bg-[rgba(6,10,24,0.72)] border-l-2" style={{ borderColor: TONE_COLOR[l.tone], color: l.tone === "sys" ? "#cfe3ff" : TONE_COLOR[l.tone] }}>
+          <span style={{ color: TONE_COLOR[l.tone] }}>▸</span> {l.msg}
         </div>
-
-        <div className="flex-1 flex flex-col items-center gap-1.5">
-          <div className="flex gap-2">
-            <ResourceReadout res="p" value={snap.p} r={snap.rates.p} />
-            <ResourceReadout res="l" value={snap.l} r={snap.rates.l} />
-            <ResourceReadout res="t" value={snap.t} r={snap.rates.t} />
-          </div>
-          <div className="holo-panel-sm px-3 py-1.5 flex items-center gap-2 w-[300px]">
-            <svg width="13" height="14" viewBox="0 0 13 14" className="shrink-0">
-              <path d="M6.5 1 12 3v4c0 3.4-2.3 5.6-5.5 6.8C3.3 12.6 1 10.4 1 7V3Z" fill="none" stroke={snap.danger ? "#ff4d5e" : "#3af5ff"} strokeWidth="1.4" />
-            </svg>
-            <div className="flex-1 h-[7px] bg-[#101a33] border border-[#1c2c52] overflow-hidden">
-              <div
-                className="h-full transition-all duration-500"
-                style={{
-                  width: `${snap.integrity}%`,
-                  background: snap.danger ? "linear-gradient(90deg,#ff4d5e,#ff9d5e)" : "linear-gradient(90deg,#1c8ba0,#3af5ff)",
-                  boxShadow: snap.danger ? "0 0 10px #ff4d5e" : "0 0 10px rgba(58,245,255,.5)",
-                }}
-              />
-            </div>
-            <span className="font-mono text-[10px]" style={{ color: snap.danger ? "#ff4d5e" : "#3af5ff" }}>
-              {Math.floor(snap.integrity)}%
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-col items-end gap-2 pointer-events-auto">
-          <div className="holo-panel-sm px-3 py-2 min-w-[218px]">
-            <div className="font-display text-[9px] text-[#6f86b8] mb-1.5">{snap.sandbox ? "SANDBOX MODE" : "GENESIS OBJECTIVE"}</div>
-            <div className="flex items-center gap-2 font-mono text-[10.5px]">
-              <span style={{ color: snap.owned >= OBJECTIVE.housesNeeded ? "#6bff9e" : "#d7e6ff" }}>
-                {snap.owned >= OBJECTIVE.housesNeeded ? "◆" : "◇"} STRUCTURES {snap.owned}/{OBJECTIVE.housesNeeded}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="font-mono text-[10.5px]" style={{ color: snap.netWorth >= netGoal ? "#6bff9e" : "#d7e6ff" }}>
-                {snap.netWorth >= netGoal ? "◆" : "◇"} NET {fmt(snap.netWorth)}/{fmt(netGoal)}
-              </span>
-            </div>
-            <div className="h-[4px] bg-[#101a33] border border-[#1c2c52] mt-1.5 overflow-hidden">
-              <div className="h-full transition-all duration-500" style={{ width: `${netPct}%`, background: "#ffc24d" }} />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={onMute} className="holo-panel-sm px-2.5 py-1.5 font-mono text-[10px] text-[#9fdcff] hover:text-[#3af5ff] transition-colors cursor-pointer" title="Mute (M)">
-              {muted ? "SND OFF" : "SND ON"}
-            </button>
-            <button onClick={onPause} className="holo-panel-sm px-2.5 py-1.5 font-mono text-[10px] text-[#9fdcff] hover:text-[#3af5ff] transition-colors cursor-pointer" title="Pause (ESC)">
-              ▮▮ PAUSE
-            </button>
-          </div>
-          <div className="font-mono text-[9px] text-[#6f86b8] pr-1">T+{snap.timePlayed}s · {snap.plotsFree} PLOTS VACANT</div>
-        </div>
-      </div>
-
-      {/* log ticker */}
-      <div className="absolute bottom-3 left-3 z-10 w-[400px] pointer-events-none space-y-1">
-        {logs.map((l) => (
-          <div key={l.id} className="log-line font-mono text-[10px] leading-snug flex gap-2" style={{ color: toneColor[l.tone], textShadow: "0 1px 4px rgba(0,0,0,.9)" }}>
-            <span className="text-[#42557f] shrink-0">[T+{String(l.t).padStart(3, "0")}]</span>
-            <span>{l.msg}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* interaction prompt */}
-      {prompt && (
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 rise-in pointer-events-none">
-          <div className="holo-panel-sm px-4 py-2 font-mono text-[11px] text-[#9fdcff] flex items-center gap-2">
-            <span className="kbd">E</span>
-            <span>{prompt}</span>
-          </div>
-        </div>
-      )}
-
-      {/* control hint */}
-      {!prompt && (
-        <div className="absolute bottom-3 right-3 z-10 font-mono text-[9.5px] text-[#42557f] flex items-center gap-2 pointer-events-none">
-          <span className="kbd">W</span><span className="kbd">A</span><span className="kbd">S</span><span className="kbd">D</span> MOVE
-          <span className="kbd">SCROLL</span> ZOOM
-          <span className="kbd">ESC</span> PAUSE
-        </div>
-      )}
-    </>
+      ))}
+    </div>
   );
 }
+
+// ── war status panel (right bottom) ──────────────────────────────────
+export function WarPanel({ snap }: { snap: PltSnapshot }) {
+  return (
+    <div className="absolute right-4 bottom-[104px] z-10 holo-panel px-4 py-3 w-[220px] pointer-events-none">
+      <div className="font-display text-[10px] text-[#ff4d5e] tracking-[0.2em]">VOID WAR STATUS</div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 font-mono text-[10px]">
+        <span className="text-[#6f86b8]">WAVE</span><span className="text-[#eaffff] text-right">{snap.wave}</span>
+        <span className="text-[#6f86b8]">NEXT RAID</span>
+        <span className="text-right" style={{ color: snap.nextWaveIn < 6 ? "#ff4d5e" : "#eaffff" }}>{snap.nextWaveIn >= 900 ? "—" : `${snap.nextWaveIn}s`}</span>
+        <span className="text-[#6f86b8]">THREATS</span><span className="text-right" style={{ color: snap.threats > 0 ? "#ff4d5e" : "#6bff9e" }}>{snap.threats}</span>
+        <span className="text-[#6f86b8]">KILLS</span><span className="text-[#eaffff] text-right">{snap.kills}</span>
+        <span className="text-[#6f86b8]">TURRETS</span><span className="text-[#eaffff] text-right">{snap.turretCount}/{TURRET_MAX}</span>
+      </div>
+      <div className="mt-2 pt-2 border-t border-[#1c2c52]">
+        <div className="font-mono text-[9px] text-[#6f86b8] mb-1">CITADELS</div>
+        <div className="space-y-1">
+          {snap.citadels.map((c, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10" fill={c.hp > 0 ? "#ff4d5e" : "#1c2c52"} /></svg>
+              <div className="flex-1 h-[6px] bg-[#0a1226] border border-[#1c2c52]">
+                <div className="h-full transition-all duration-300" style={{ width: `${(c.hp / c.hpMax) * 100}%`, background: c.hp > 0 ? "#ff4d5e" : "transparent" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── selection panel (left bottom) ────────────────────────────────────
+export function SelectionPanel({ snap }: { snap: PltSnapshot }) {
+  return (
+    <div className="absolute left-4 bottom-[104px] z-10 w-[240px] pointer-events-none space-y-2">
+      {snap.queue && (
+        <div className="holo-panel-sm px-3 py-2">
+          <div className="flex justify-between font-mono text-[9px] text-[#6f86b8]">
+            <span>FORGING :: {snap.queue.name.toUpperCase()}{snap.queueCount > 1 ? ` (+${snap.queueCount - 1})` : ""}</span>
+            <span className="text-[#3af5ff]">{Math.ceil(snap.queue.t)}s</span>
+          </div>
+          <div className="w-full h-[6px] mt-1 bg-[#0a1226] border border-[#1c2c52]">
+            <div className="h-full bg-[#3af5ff] transition-all duration-200" style={{ width: `${(1 - snap.queue.t / snap.queue.total) * 100}%`, boxShadow: "0 0 8px rgba(58,245,255,.7)" }} />
+          </div>
+        </div>
+      )}
+      <div className="holo-panel px-3 py-2.5">
+        <div className="flex items-center justify-between">
+          <span className="font-display text-[10px] text-[#3af5ff] tracking-[0.15em]">SELECTION</span>
+          <span className="font-mono text-[10px]" style={{ color: snap.supply >= snap.supplyMax ? "#ff4d5e" : "#9fdcff" }}>
+            SUPPLY {snap.supply}/{snap.supplyMax}
+          </span>
+        </div>
+        {snap.selectedCount === 0 ? (
+          <div className="font-mono text-[9.5px] text-[#42557f] mt-1.5">drag to select · right-click to command</div>
+        ) : (
+          <div className="mt-1.5 space-y-1">
+            {snap.selected.map((u, i) => (
+              <div key={i} className="flex items-center gap-2 font-mono text-[9.5px]">
+                <span className="text-[#9fdcff] w-[86px] truncate">{u.name}</span>
+                <div className="flex-1 h-[5px] bg-[#0a1226] border border-[#1c2c52]">
+                  <div className="h-full" style={{ width: `${(u.hp / u.hpMax) * 100}%`, background: u.hp / u.hpMax > 0.4 ? "#6bff9e" : "#ffc24d" }} />
+                </div>
+                <span className="text-[#6f86b8] w-[26px] text-right">{u.hp}</span>
+              </div>
+            ))}
+            {snap.selectedCount > 6 && <div className="font-mono text-[9px] text-[#42557f]">+{snap.selectedCount - 6} more…</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── hotbar ───────────────────────────────────────────────────────────
+interface HotbarProps {
+  snap: PltSnapshot;
+  onArm: (id: WeaponId | null) => void;
+  onProd: (id: UnitId) => void;
+  onTurret: () => void;
+}
+
+function HotSlot({ label, sub, color, cd, cdMax, armed, disabled, onClick, children, title }: {
+  label: string; sub: string; color: string; cd: number; cdMax: number; armed?: boolean; disabled?: boolean;
+  onClick: () => void; children: ReactNode; title: string;
+}) {
+  const pct = cdMax > 0 ? Math.min(1, cd / cdMax) : 0;
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      disabled={disabled && !armed}
+      className="relative w-[64px] h-[64px] holo-panel-sm flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer group"
+      style={{
+        borderColor: armed ? color : undefined,
+        boxShadow: armed ? `0 0 18px ${color}66` : undefined,
+        opacity: disabled && !armed ? 0.45 : 1,
+      }}
+    >
+      <span style={{ color }}>{children}</span>
+      <span className="font-display text-[8px] leading-none" style={{ color }}>{label}</span>
+      <span className="font-mono text-[7.5px] text-[#6f86b8] leading-none">{sub}</span>
+      {pct > 0 && (
+        <span className="absolute inset-0 flex items-end overflow-hidden pointer-events-none">
+          <span className="w-full bg-[rgba(2,4,12,0.75)]" style={{ height: `${pct * 100}%` }} />
+        </span>
+      )}
+      {pct > 0 && <span className="absolute inset-0 flex items-center justify-center font-mono text-[13px] text-[#eaffff] pointer-events-none">{Math.ceil(cd)}</span>}
+      {armed && <span className="absolute -top-[7px] left-1/2 -translate-x-1/2 font-display text-[7px] px-1" style={{ color, background: "#04060f" }}>ARMED</span>}
+    </button>
+  );
+}
+
+export function Hotbar({ snap, onArm, onProd, onTurret }: HotbarProps) {
+  const weapons = (Object.keys(WEAPON_DEFS) as WeaponId[]);
+  const units = (Object.keys(UNIT_DEFS) as UnitId[]);
+  return (
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-end gap-2 pointer-events-auto">
+      <div className="holo-panel p-2 flex gap-1.5 items-end">
+        <div className="font-display text-[8px] text-[#6f86b8] px-1 pb-1 self-center" style={{ writingMode: "vertical-rl" }}>SOUL</div>
+        {weapons.map((id) => {
+          const def = WEAPON_DEFS[id];
+          const state = snap.weapons.find((w) => w.id === id)!;
+          const costTxt = def.cost.p ? `${def.cost.p}P` : `${def.cost.l}L`;
+          const Icon = WEAPON_ICONS[id];
+          return (
+            <HotSlot
+              key={id} label={def.key} sub={costTxt} color={def.color}
+              cd={state.cd} cdMax={state.max} armed={snap.armed === id}
+              disabled={state.cd > 0}
+              onClick={() => onArm(snap.armed === id ? null : id)}
+              title={`${def.name} [${def.key}] :: ${def.desc} (${costTxt}, ${def.cd}s CD)`}
+            >
+              <Icon />
+            </HotSlot>
+          );
+        })}
+      </div>
+      <div className="holo-panel p-2 flex gap-1.5 items-end">
+        <div className="font-display text-[8px] text-[#6f86b8] px-1 pb-1 self-center" style={{ writingMode: "vertical-rl" }}>FORGE</div>
+        {units.map((id) => {
+          const def = UNIT_DEFS[id];
+          const costTxt = `${def.cost.p}P${def.cost.l ? `+${def.cost.l}L` : ""}${def.cost.t ? `+${def.cost.t}T` : ""}`;
+          const broke = snap.p < def.cost.p || snap.l < def.cost.l || snap.t < def.cost.t;
+          const noSupply = snap.supply + def.supply > snap.supplyMax;
+          return (
+            <HotSlot
+              key={id} label={def.key} sub={`${costTxt}`} color={def.color}
+              cd={0} cdMax={0} disabled={broke || noSupply}
+              onClick={() => onProd(id)}
+              title={`${def.name} [${def.key}] :: ${def.desc} — supply ${def.supply}`}
+            >
+              <UnitIcon kind={id} />
+            </HotSlot>
+          );
+        })}
+        <HotSlot
+          label="T" sub={`${TURRET_COST.p}P+${TURRET_COST.t}T`} color="#3af5ff"
+          cd={0} cdMax={0} disabled={snap.p < TURRET_COST.p || snap.t < TURRET_COST.t || snap.turretCount >= TURRET_MAX}
+          onClick={onTurret}
+          title={`Defense Turret [T] :: auto-fires on bugs near its position`}
+        >
+          <IconTurret />
+        </HotSlot>
+      </div>
+      {snap.armed && (
+        <div className="holo-panel-sm px-3 py-2 font-mono text-[10px] animate-pulse" style={{ color: WEAPON_DEFS[snap.armed].color }}>
+          TARGETING :: CLICK MAP<br /><span className="text-[#6f86b8]">ESC to cancel</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── wave banner ──────────────────────────────────────────────────────
+export function WaveBanner({ wave }: { wave: number }) {
+  if (wave === 0) return null;
+  return (
+    <div key={wave} className="absolute top-[24%] inset-x-0 z-10 flex justify-center pointer-events-none">
+      <div className="rise-in text-center">
+        <div className="font-display text-[38px] text-[#ff4d5e]" style={{ textShadow: "0 0 26px rgba(255,77,94,.8), 3px 3px 0 #2a0510" }}>
+          VOID RAID {wave}
+        </div>
+        <div className="font-mono text-[11px] text-[#ffb3ba] tracking-[0.3em] mt-1">THE BUGS ARE BREACHING THE FOG</div>
+      </div>
+    </div>
+  );
+}
+
+// ── prompt ───────────────────────────────────────────────────────────
+export function PromptBar({ prompt }: { prompt: string | null }) {
+  if (!prompt) return null;
+  return (
+    <div className="absolute bottom-[112px] left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+      <div className="holo-panel-sm px-4 py-2 font-mono text-[11.5px] text-[#9fdcff] rise-in" style={{ borderColor: "#3af5ff55" }}>
+        {prompt}
+      </div>
+    </div>
+  );
+}
+
+export { HOUSE_DEFS };

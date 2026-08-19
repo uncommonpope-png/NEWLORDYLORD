@@ -1,351 +1,369 @@
+/**
+ * SOULFEILD :: PROCEDURAL TEXTURE FOUNDRY
+ * Every sprite in the Spatial OS is forged in code — isometric boxes,
+ * houses, units, bugs, citadels, FX. Zero external assets.
+ */
 import Phaser from "phaser";
 
 const P = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
 
-function mulberry32(a: number) {
-  return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+const shade = (hex: string, f: number): string => {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.min(255, Math.max(0, Math.round(((n >> 16) & 255) * f)));
+  const g = Math.min(255, Math.max(0, Math.round(((n >> 8) & 255) * f)));
+  const b = Math.min(255, Math.max(0, Math.round((n & 255) * f)));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+};
+
+/** Classic 2:1 iso box with light from the top-left. */
+function isoBox(g: Phaser.GameObjects.Graphics, cx: number, baseY: number, w: number, h: number, color: string, heightScale = 1) {
+  const hw = w / 2, hh = w / 4, dh = h * heightScale;
+  const top = baseY - dh;
+  const topPts = [P(cx, top - hh), P(cx + hw, top), P(cx, top + hh), P(cx - hw, top)];
+  const leftPts = [P(cx - hw, top), P(cx, top + hh), P(cx, baseY + hh), P(cx - hw, baseY)];
+  const rightPts = [P(cx, top + hh), P(cx + hw, top), P(cx + hw, baseY), P(cx, baseY + hh)];
+  g.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, 1);
+  g.fillPoints(topPts, true);
+  g.fillStyle(Phaser.Display.Color.HexStringToColor(shade(color, 0.66)).color, 1);
+  g.fillPoints(leftPts, true);
+  g.fillStyle(Phaser.Display.Color.HexStringToColor(shade(color, 0.42)).color, 1);
+  g.fillPoints(rightPts, true);
+  g.lineStyle(1, Phaser.Display.Color.HexStringToColor(shade(color, 1.5)).color, 0.28);
+  g.strokePoints(topPts, true);
+  return { top, hw, hh };
+}
+
+/** Diamond ground tile. */
+function tile(g: Phaser.GameObjects.Graphics, w: number, h: number, color: string, opts?: { edge?: string; detail?: (g: Phaser.GameObjects.Graphics) => void }) {
+  const cx = w / 2, cy = h / 2;
+  const pts = [P(cx, 0), P(w, cy), P(cx, h), P(0, cy)];
+  g.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, 1);
+  g.fillPoints(pts, true);
+  g.lineStyle(1, 0x000000, 0.22);
+  g.strokePoints(pts, true);
+  if (opts?.edge) {
+    g.lineStyle(1, Phaser.Display.Color.HexStringToColor(opts.edge).color, 0.65);
+    g.lineBetween(cx, 1, w - 1, cy);
+    g.lineBetween(cx, 1, 1, cy);
+  }
+  opts?.detail?.(g);
+}
+
+function diamond(g: Phaser.GameObjects.Graphics, cx: number, cy: number, w: number, h: number, color: string, alpha = 1) {
+  g.fillStyle(Phaser.Display.Color.HexStringToColor(color).color, alpha);
+  g.fillPoints([P(cx, cy - h / 2), P(cx + w / 2, cy), P(cx, cy + h / 2), P(cx - w / 2, cy)], true);
+}
+
+export function createTextures(scene: Phaser.Scene) {
+  const make = (key: string, w: number, h: number, fn: (g: Phaser.GameObjects.Graphics) => void) => {
+    if (scene.textures.exists(key)) return;
+    const g = scene.add.graphics();
+    fn(g);
+    g.generateTexture(key, w, h);
+    g.destroy();
   };
-}
 
-const diamond = (cx: number, cy: number, hw: number, hh: number) => [
-  P(cx, cy - hh), P(cx + hw, cy), P(cx, cy + hh), P(cx - hw, cy),
-];
+  // ── ground tiles ────────────────────────────────
+  make("grass", 64, 32, (g) => tile(g, 64, 32, "#15294a", {
+    detail: (d) => {
+      d.fillStyle(0x1e3a63, 0.9);
+      d.fillRect(20, 14, 2, 2); d.fillRect(40, 18, 2, 2); d.fillRect(30, 22, 2, 2);
+    },
+  }));
+  make("grass2", 64, 32, (g) => tile(g, 64, 32, "#132642", {
+    detail: (d) => {
+      d.lineStyle(1, 0x2c4d7d, 0.9);
+      d.lineBetween(26, 18, 26, 14); d.lineBetween(38, 20, 38, 16);
+    },
+  }));
+  make("grass3", 64, 32, (g) => tile(g, 64, 32, "#182f54", {
+    detail: (d) => { d.fillStyle(0x0d1c36, 1); d.fillRect(36, 12, 3, 2); d.fillRect(24, 20, 3, 2); },
+  }));
+  make("path", 64, 32, (g) => tile(g, 64, 32, "#232d4d", {
+    edge: "#3d4f82",
+    detail: (d) => {
+      d.lineStyle(1, 0x31406b, 1);
+      d.lineBetween(16, 16, 30, 9); d.lineBetween(34, 25, 48, 18);
+      d.fillStyle(0x3af5ff, 0.5); d.fillRect(31, 15, 2, 2);
+    },
+  }));
+  make("void", 64, 32, (g) => tile(g, 64, 32, "#0a0d1c", {
+    detail: (d) => {
+      d.lineStyle(1, 0xff4d5e, 0.35);
+      d.lineBetween(18, 14, 26, 18); d.lineBetween(40, 12, 34, 20);
+      d.fillStyle(0xff4d5e, 0.4); d.fillRect(44, 17, 2, 2);
+    },
+  }));
 
-function tex(scene: Phaser.Scene, key: string, w: number, h: number, draw: (g: Phaser.GameObjects.Graphics) => void) {
-  const g = scene.add.graphics();
-  draw(g);
-  g.generateTexture(key, w, h);
-  g.destroy();
-}
-
-export function makeTextures(scene: Phaser.Scene) {
-  // ── ground tiles (64x32 diamonds) ──
-  const grassTones = [
-    ["#17453a", "#1d5a4a", "#0f332b"],
-    ["#1a4a38", "#226150", "#113a2d"],
-    ["#153f3d", "#1b5349", "#0e2f30"],
-  ];
-  grassTones.forEach((tones, vi) => {
-    tex(scene, `tile_grass${vi}`, 64, 32, (g) => {
-      g.fillStyle(Phaser.Display.Color.HexStringToColor(tones[0]).color, 1);
-      g.fillPoints(diamond(32, 16, 32, 16), true);
-      const r2 = mulberry32(77 + vi * 31);
-      for (let i = 0; i < 5; i++) {
-        const px = 12 + r2() * 40, py = 8 + r2() * 16;
-        g.fillStyle(Phaser.Display.Color.HexStringToColor(r2() > 0.5 ? tones[1] : tones[2]).color, 0.8);
-        g.fillPoints(diamond(px, py, 3 + r2() * 4, 1.5 + r2() * 2), true);
-      }
-      g.lineStyle(1, Phaser.Display.Color.HexStringToColor(tones[1]).color, 0.7);
-      g.beginPath(); g.moveTo(1, 16); g.lineTo(32, 1); g.lineTo(63, 16); g.strokePath();
-    });
-  });
-
-  tex(scene, "tile_path", 64, 32, (g) => {
-    g.fillStyle(0x33405e, 1);
-    g.fillPoints(diamond(32, 16, 32, 16), true);
-    const r2 = mulberry32(991);
-    for (let i = 0; i < 7; i++) {
-      const px = 10 + r2() * 44, py = 7 + r2() * 18;
-      g.fillStyle(r2() > 0.6 ? 0x46588a : 0x2a3550, 1);
-      g.fillPoints(diamond(px, py, 4 + r2() * 4, 2 + r2() * 2), true);
-    }
-    g.lineStyle(1, 0x3af5ff, 0.22);
-    g.strokePoints(diamond(32, 16, 30, 14.5), true);
-  });
-
-  tex(scene, "tile_void", 64, 32, (g) => {
-    g.fillStyle(0x0a0e1d, 1);
-    g.fillPoints(diamond(32, 16, 32, 16), true);
-    g.lineStyle(1, 0x3af5ff, 0.09);
-    g.strokePoints(diamond(32, 16, 31, 15.5), true);
-    const r2 = mulberry32(555);
-    for (let i = 0; i < 3; i++) {
-      g.fillStyle(0xff3ec8, 0.14 + r2() * 0.15);
-      g.fillCircle(8 + r2() * 48, 6 + r2() * 20, 1);
-    }
-  });
-
-  // ── barrier panel ──
-  tex(scene, "barrier", 64, 58, (g) => {
-    const pts = [P(10, 58), P(54, 58), P(60, 12), P(32, 0), P(4, 12)];
-    g.fillStyle(0x3af5ff, 0.13);
-    g.fillPoints(pts, true);
-    g.lineStyle(1.5, 0x3af5ff, 0.55);
-    g.strokePoints(pts, true);
-    g.lineStyle(1, 0x3af5ff, 0.3);
-    g.beginPath(); g.moveTo(32, 8); g.lineTo(32, 54); g.strokePath();
-    g.beginPath(); g.moveTo(14, 40); g.lineTo(50, 40); g.strokePath();
-    g.fillStyle(0x9ffbff, 0.9);
-    g.fillCircle(32, 4, 2.2);
-  });
-
-  // ── plot for-sale marker ──
-  tex(scene, "plot_marker", 140, 74, (g) => {
-    g.lineStyle(2, 0x3af5ff, 0.8);
-    g.strokePoints(diamond(70, 37, 66, 33), true);
-    g.lineStyle(1, 0xff3ec8, 0.6);
-    g.strokePoints(diamond(70, 37, 54, 27), true);
-    [P(70, 4), P(136, 37), P(70, 70), P(4, 37)].forEach((p) => {
-      g.fillStyle(0x3af5ff, 1); g.fillCircle(p.x, p.y, 3);
-    });
-  });
-
-  // ── NEON SPIRE ──
-  tex(scene, "house_neon", 150, 220, (g) => {
-    const cx = 75, baseY = 186;
-    g.fillStyle(0x0a1226, 1); g.fillPoints(diamond(cx, baseY, 66, 33), true);
-    g.lineStyle(1.5, 0x3af5ff, 0.8); g.strokePoints(diamond(cx, baseY, 66, 33), true);
-    const hw = 40, hh = 20, H = 132;
-    const L = P(cx - hw, baseY), B = P(cx, baseY + hh), R = P(cx + hw, baseY);
-    g.fillStyle(0x16255c, 1);
-    g.fillPoints([L, B, P(B.x, B.y - H), P(L.x, L.y - H)], true);
-    g.fillStyle(0x0d1738, 1);
-    g.fillPoints([B, R, P(R.x, R.y - H), P(B.x, B.y - H)], true);
-    g.fillStyle(0x1e3070, 1);
-    g.fillPoints(diamond(cx, baseY - H, hw, hh), true);
-    const H2 = 34, hw2 = 26, hh2 = 13, y2 = baseY - H;
-    g.fillStyle(0x1a2c66, 1);
-    g.fillPoints([P(cx - hw2, y2), P(cx, y2 + hh2), P(cx, y2 + hh2 - H2), P(cx - hw2, y2 - H2)], true);
-    g.fillStyle(0x101d46, 1);
-    g.fillPoints([P(cx, y2 + hh2), P(cx + hw2, y2), P(cx + hw2, y2 - H2), P(cx, y2 + hh2 - H2)], true);
-    g.fillStyle(0x243a86, 1);
-    g.fillPoints(diamond(cx, y2 - H2, hw2, hh2), true);
-    g.lineStyle(2, 0x8fa5d8, 1); g.beginPath(); g.moveTo(cx, y2 - H2); g.lineTo(cx, y2 - H2 - 26); g.strokePath();
-    g.fillStyle(0xff3ec8, 1); g.fillCircle(cx, y2 - H2 - 28, 3.4);
-    for (let i = 0; i < 6; i++) {
-      const wy = baseY - 18 - i * 19;
-      g.fillStyle(i % 2 ? 0xff3ec8 : 0x3af5ff, 0.9);
-      g.fillPoints([P(cx + 8, wy + 4), P(cx + hw - 6, wy - 3), P(cx + hw - 6, wy - 7), P(cx + 8, wy)], true);
-    }
-    g.fillStyle(0x0a1226, 1);
-    g.fillPoints([P(cx - hw + 6, baseY - 34), P(cx - 8, baseY - 21), P(cx - 8, baseY - 61), P(cx - hw + 6, baseY - 74)], true);
-    g.lineStyle(1.5, 0xff3ec8, 1);
-    g.strokePoints([P(cx - hw + 6, baseY - 34), P(cx - 8, baseY - 21), P(cx - 8, baseY - 61), P(cx - hw + 6, baseY - 74)], true);
-    for (let i = 0; i < 3; i++) {
-      g.fillStyle(0x3af5ff, 0.95);
-      g.fillPoints([P(cx - hw + 12, baseY - 42 - i * 10), P(cx - 14, baseY - 29 - i * 10), P(cx - 14, baseY - 32 - i * 10), P(cx - hw + 12, baseY - 45 - i * 10)], true);
-    }
-    g.fillStyle(0x050a1c, 1);
-    g.fillPoints([P(cx + 10, baseY + 12), P(cx + 26, baseY + 4), P(cx + 26, baseY - 24), P(cx + 10, baseY - 16)], true);
-    g.lineStyle(1.5, 0x3af5ff, 0.9);
-    g.strokePoints([P(cx + 10, baseY + 12), P(cx + 26, baseY + 4), P(cx + 26, baseY - 24), P(cx + 10, baseY - 16)], true);
-    g.lineStyle(1, 0x3af5ff, 0.35);
-    g.beginPath(); g.moveTo(cx - hw, baseY); g.lineTo(cx - hw, baseY - H); g.moveTo(cx + hw, baseY); g.lineTo(cx + hw, baseY - H); g.strokePath();
-  });
-
-  // ── HEARTHWOOD LODGE ──
-  tex(scene, "house_hearth", 150, 200, (g) => {
-    const cx = 75, baseY = 168, hw = 52, hh = 26, H = 66;
-    g.fillStyle(0x12291f, 0.9); g.fillPoints(diamond(cx, baseY, 64, 32), true);
-    const L = P(cx - hw, baseY), B = P(cx, baseY + hh), R = P(cx + hw, baseY);
-    g.fillStyle(0x6b4a2f, 1);
-    g.fillPoints([L, B, P(B.x, B.y - H), P(L.x, L.y - H)], true);
-    g.fillStyle(0x4e3421, 1);
-    g.fillPoints([B, R, P(R.x, R.y - H), P(B.x, B.y - H)], true);
-    g.lineStyle(2, 0x3a2415, 0.9);
-    for (let i = 1; i < 3; i++) {
-      g.beginPath(); g.moveTo(L.x, L.y - (H / 3) * i); g.lineTo(B.x, B.y - (H / 3) * i); g.lineTo(R.x, R.y - (H / 3) * i); g.strokePath();
-    }
-    const ry = baseY - H, apex = P(cx, ry - 52);
-    const TL = P(cx - hw - 8, ry + 2), TB = P(cx, ry + hh + 6), TR = P(cx + hw + 8, ry + 2), TT = P(cx, ry - hh - 6);
-    g.fillStyle(0x2c5e42, 1); g.fillPoints([apex, TT, TR], true);
-    g.fillStyle(0x234c35, 1); g.fillPoints([apex, TR, TB], true);
-    g.fillStyle(0x387050, 1); g.fillPoints([apex, TB, TL], true);
-    g.fillStyle(0x2c5e42, 1); g.fillPoints([apex, TL, TT], true);
-    g.lineStyle(1.5, 0x8fd96b, 0.5);
-    g.beginPath(); g.moveTo(apex.x, apex.y); g.lineTo(TB.x, TB.y); g.moveTo(apex.x, apex.y); g.lineTo(TR.x, TR.y); g.strokePath();
-    const r2 = mulberry32(4242);
-    for (let i = 0; i < 9; i++) {
-      g.fillStyle(0x8fd96b, 0.35 + r2() * 0.3);
-      g.fillCircle(cx - 40 + r2() * 80, ry - 30 + r2() * 40, 1.6 + r2() * 1.6);
-    }
-    g.fillStyle(0x5b5f6b, 1); g.fillRect(cx + 22, ry - 58, 14, 30);
-    g.fillStyle(0x71768a, 1); g.fillPoints(diamond(cx + 29, ry - 58, 8, 4), true);
-    g.fillStyle(0x2a2d38, 1); g.fillPoints(diamond(cx + 29, ry - 58, 5, 2.5), true);
-    g.fillStyle(0xffc24d, 0.95); g.fillCircle(cx - 26, baseY - 32, 7);
-    g.lineStyle(2, 0x3a2415, 1); g.strokeCircle(cx - 26, baseY - 32, 7);
-    g.beginPath(); g.moveTo(cx - 33, baseY - 32); g.lineTo(cx - 19, baseY - 32); g.strokePath();
-    g.fillStyle(0x2f1d10, 1);
-    g.fillPoints([P(cx + 12, baseY + 14), P(cx + 32, baseY + 4), P(cx + 32, baseY - 26), P(cx + 12, baseY - 16)], true);
-    g.fillStyle(0xffc24d, 1); g.fillCircle(cx + 16, baseY - 6, 1.8);
-    [[cx - 52, baseY + 6], [cx - 44, baseY + 14], [cx + 48, baseY + 10]].forEach(([fx, fy], i) => {
-      g.fillStyle(i % 2 ? 0xff5ad1 : 0x8fd96b, 0.9); g.fillCircle(fx, fy, 2.4);
-      g.fillStyle(i % 2 ? 0xff5ad1 : 0x8fd96b, 0.25); g.fillCircle(fx, fy, 5.5);
-    });
-  });
-
-  // ── MONOLITH BUNKER ──
-  tex(scene, "house_monolith", 150, 200, (g) => {
-    const cx = 75, baseY = 168, hw = 58, hh = 29, H = 84;
-    g.fillStyle(0x20242e, 1); g.fillPoints(diamond(cx, baseY, 66, 33), true);
-    const L = P(cx - hw, baseY), B = P(cx, baseY + hh), R = P(cx + hw, baseY);
-    g.fillStyle(0x5a6472, 1);
-    g.fillPoints([L, B, P(B.x, B.y - H), P(L.x, L.y - H)], true);
-    g.fillStyle(0x3d4552, 1);
-    g.fillPoints([B, R, P(R.x, R.y - H), P(B.x, B.y - H)], true);
-    const ry = baseY - H;
-    g.fillStyle(0x6a7588, 1);
-    g.fillPoints([P(L.x, ry), P(B.x, ry + hh), P(B.x, ry + hh - 8), P(L.x, ry - 8)], true);
-    g.fillStyle(0x4a5464, 1);
-    g.fillPoints([P(B.x, ry + hh), P(R.x, ry), P(R.x, ry - 8), P(B.x, ry + hh - 8)], true);
-    g.fillStyle(0x77839a, 1);
-    g.fillPoints([P(L.x, ry - 8), P(B.x, ry + hh - 8), P(R.x, ry - 8), P(cx, ry - hh - 8)], true);
+  // ── houses (iso architecture, base at bottom center) ──────────────
+  make("house_neon", 132, 176, (g) => {
+    const cx = 66;
+    isoBox(g, cx, 150, 96, 62, "#12234d");
+    isoBox(g, cx, 150 - 62, 96, 10, "#1b3468");
+    isoBox(g, cx - 20, 150 - 72, 44, 46, "#0e1c3d");
+    isoBox(g, cx - 20, 150 - 72 - 46, 44, 8, "#3af5ff", 0.5);
+    g.lineStyle(2, 0x3af5ff, 0.9); g.lineBetween(cx - 20, 150 - 120, cx - 20, 150 - 148);
+    g.fillStyle(0xff3ec8, 1); g.fillCircle(cx - 20, 150 - 151, 3);
+    g.fillStyle(0x050a18, 1);
+    g.fillRect(cx - 34, 150 - 40, 20, 26);
+    g.lineStyle(1.5, 0xff3ec8, 1); g.strokeRect(cx - 34, 150 - 40, 20, 26);
     for (let i = 0; i < 4; i++) {
-      const wy = baseY - 22 - i * 14;
+      g.lineStyle(2, i % 2 ? 0xff3ec8 : 0x3af5ff, 0.95);
+      g.lineBetween(cx + 14, 140 - i * 17, cx + 40, 127 - i * 17);
+    }
+    g.fillStyle(0x3af5ff, 0.12);
+    g.fillPoints([P(cx, 152), P(cx + 52, 126), P(cx, 100), P(cx - 52, 126)], true);
+  });
+
+  make("house_hearth", 132, 160, (g) => {
+    const cx = 66;
+    isoBox(g, cx, 146, 100, 54, "#5a3f28");
+    g.lineStyle(2, 0x3c2a1a, 1);
+    g.lineBetween(cx - 48, 120, cx - 2, 143); g.lineBetween(cx - 48, 106, cx - 2, 129);
+    isoBox(g, cx + 34, 146 - 54, 22, 30, "#6b7280");
+    g.fillStyle(0x2b2f38, 1); g.fillEllipse(cx + 34, 146 - 54 - 30, 24, 10);
+    isoBox(g, cx - 16, 146 - 54, 34, 34, "#4a3320");
+    g.fillStyle(0x0d1c12, 1);
+    g.fillPoints([P(cx - 16, 146 - 88 - 30), P(cx - 66, 146 - 46), P(cx - 16, 146 - 46 + 18), P(cx + 34, 146 - 46)], true);
+    g.lineStyle(2, 0x8fd96b, 0.8);
+    g.strokePoints([P(cx - 16, 146 - 118), P(cx - 66, 146 - 46), P(cx - 16, 146 - 28), P(cx + 34, 146 - 46)], true);
+    g.fillStyle(0x241505, 1);
+    g.fillRect(cx - 26, 146 - 34, 20, 34);
+    g.lineStyle(1.5, 0xffc24d, 1); g.strokeRect(cx - 26, 146 - 34, 20, 34);
+    g.fillStyle(0xffc24d, 0.9); g.fillCircle(cx + 20, 128, 5);
+    g.lineStyle(1.5, 0xffc24d, 1); g.strokeCircle(cx + 20, 128, 8);
+    g.fillStyle(0x8fd96b, 1);
+    g.fillCircle(cx - 52, 140, 3); g.fillCircle(cx + 48, 134, 3); g.fillCircle(cx - 40, 150, 2);
+  });
+
+  make("house_monolith", 132, 168, (g) => {
+    const cx = 66;
+    isoBox(g, cx, 152, 104, 66, "#4b5563");
+    g.fillStyle(0x23272f, 1);
+    g.fillPoints([P(cx - 52, 152 - 66), P(cx, 152 - 66 + 26), P(cx, 152 - 66 + 38), P(cx - 52, 152 - 66 + 12)], true);
+    for (let i = 0; i < 3; i++) {
       g.fillStyle(0x14181f, 1);
-      g.fillPoints([P(cx + 12, wy + 5), P(cx + hw - 10, wy - 2), P(cx + hw - 10, wy - 6), P(cx + 12, wy + 1)], true);
+      g.fillPoints([P(cx + 8, 146 - i * 15), P(cx + 44, 128 - i * 15), P(cx + 44, 132 - i * 15), P(cx + 8, 150 - i * 15)], true);
     }
-    g.fillStyle(0x232932, 1);
-    g.fillPoints([P(cx - 44, baseY + 4), P(cx - 12, baseY + 20), P(cx - 12, baseY - 26), P(cx - 44, baseY - 42)], true);
-    for (let i = 0; i < 5; i++) {
-      const sy = baseY + 14 - i * 10;
-      g.fillStyle(i % 2 ? 0xffc24d : 0x11141a, 1);
-      g.fillPoints([P(cx - 42, sy), P(cx - 14, sy + 14), P(cx - 14, sy + 9), P(cx - 42, sy - 5)], true);
-    }
-    const r2 = mulberry32(88);
-    for (let i = 0; i < 12; i++) {
-      g.fillStyle(0x2c323e, 1);
-      g.fillCircle(cx - 50 + r2() * 100, baseY - 8 - r2() * 66, 1.4);
-    }
-    g.lineStyle(2, 0x2c323e, 1); g.beginPath(); g.moveTo(cx + 20, ry - 14); g.lineTo(cx + 20, ry - 38); g.strokePath();
-    g.fillStyle(0xff4d5e, 1); g.fillCircle(cx + 20, ry - 40, 3.4);
-    g.fillStyle(0xff4d5e, 0.25); g.fillCircle(cx + 20, ry - 40, 7);
-    g.fillStyle(0xff4d5e, 0.8);
-    g.fillPoints([P(cx + 20, baseY - 52), P(cx + hw - 16, baseY - 60), P(cx + hw - 16, baseY - 64), P(cx + 20, baseY - 56)], true);
-  });
-
-  // ── market terminal ──
-  tex(scene, "terminal", 72, 122, (g) => {
-    const cx = 36, baseY = 106;
-    g.fillStyle(0x0a1226, 1); g.fillPoints(diamond(cx, baseY, 32, 16), true);
-    g.lineStyle(1.5, 0x3af5ff, 0.7); g.strokePoints(diamond(cx, baseY, 32, 16), true);
-    const H = 74, hw = 17, hh = 8.5;
-    g.fillStyle(0x14224a, 1);
-    g.fillPoints([P(cx - hw, baseY), P(cx, baseY + hh), P(cx, baseY + hh - H), P(cx - hw, baseY - H)], true);
-    g.fillStyle(0x0b1430, 1);
-    g.fillPoints([P(cx, baseY + hh), P(cx + hw, baseY), P(cx + hw, baseY - H), P(cx, baseY + hh - H)], true);
-    g.fillStyle(0x1e3070, 1);
-    g.fillPoints(diamond(cx, baseY - H, hw, hh), true);
-    g.fillStyle(0x031018, 1);
-    g.fillPoints([P(cx + 3, baseY - 8), P(cx + hw - 3, baseY - 14), P(cx + hw - 3, baseY - 52), P(cx + 3, baseY - 46)], true);
-    g.lineStyle(1.5, 0x3af5ff, 0.95);
-    g.strokePoints([P(cx + 3, baseY - 8), P(cx + hw - 3, baseY - 14), P(cx + hw - 3, baseY - 52), P(cx + 3, baseY - 46)], true);
     for (let i = 0; i < 4; i++) {
-      g.fillStyle(i % 2 ? 0xff3ec8 : 0x3af5ff, 0.9);
-      g.fillPoints([P(cx + 6, baseY - 16 - i * 8), P(cx + hw - 6, baseY - 19 - i * 8), P(cx + hw - 6, baseY - 21 - i * 8), P(cx + 6, baseY - 18 - i * 8)], true);
+      g.fillStyle(i % 2 ? 0xff4d5e : 0x11141a, 1);
+      g.fillPoints([P(cx - 44 + i * 11, 150 - i * 5.5), P(cx - 34 + i * 11, 145 - i * 5.5), P(cx - 34 + i * 11, 151 - i * 5.5), P(cx - 44 + i * 11, 156 - i * 5.5)], true);
     }
-    g.fillStyle(0xffc24d, 1); g.fillRect(cx - hw + 5, baseY - 24, 8, 3);
-    g.lineStyle(1, 0x3af5ff, 0.5);
-    g.beginPath(); g.moveTo(cx - hw, baseY); g.lineTo(cx - hw, baseY - H); g.strokePath();
-    g.fillStyle(0x3af5ff, 1); g.fillCircle(cx, baseY - H - 4, 2.4);
+    g.fillStyle(0x11141a, 1);
+    g.fillRect(cx - 14, 152 - 46, 28, 46);
+    g.lineStyle(2, 0x9aa7bd, 1); g.strokeRect(cx - 14, 152 - 46, 28, 46);
+    g.lineStyle(1, 0x9aa7bd, 0.7); g.lineBetween(cx, 152 - 46, cx, 152);
+    g.lineStyle(2, 0x9aa7bd, 0.9); g.lineBetween(cx + 30, 152 - 66, cx + 30, 152 - 92);
+    g.fillStyle(0xff4d5e, 1); g.fillCircle(cx + 30, 152 - 95, 3);
   });
 
-  // ── player avatar ──
-  tex(scene, "player", 30, 46, (g) => {
-    const cx = 15;
-    g.fillStyle(0x101d3a, 1); g.fillRect(cx - 7, 32, 5, 10); g.fillRect(cx + 2, 32, 5, 10);
-    g.fillStyle(0x1b2f5e, 1); g.fillRoundedRect(cx - 9, 16, 18, 18, 4);
-    g.fillStyle(0x2a4585, 1); g.fillRoundedRect(cx - 9, 16, 9, 18, 4);
-    g.fillStyle(0x3af5ff, 1); g.fillCircle(cx, 23, 2.6);
-    g.fillStyle(0x3af5ff, 0.25); g.fillCircle(cx, 23, 5.5);
-    g.fillStyle(0xff3ec8, 1); g.fillRoundedRect(cx + 6, 18, 5, 12, 2);
-    g.fillStyle(0x223a6e, 1); g.fillCircle(cx, 9, 8);
-    g.fillStyle(0x3af5ff, 1); g.fillRoundedRect(cx - 6, 6, 12, 5, 2.5);
-    g.fillStyle(0xeaffff, 0.9); g.fillRect(cx - 4, 7, 3, 3);
-    g.fillStyle(0x3af5ff, 0.85); g.fillRect(cx - 10, 16, 3, 6); g.fillRect(cx + 7, 16, 3, 6);
-  });
-
-  // ── watcher agent ──
-  tex(scene, "watcher", 28, 38, (g) => {
-    const cx = 14, cy = 17;
-    g.fillStyle(0xff3ec8, 0.25); g.fillCircle(cx, cy + 2, 13);
-    g.fillStyle(0x7a1a5e, 1); g.fillTriangle(cx, cy - 14, cx - 11, cy, cx, cy + 3);
-    g.fillStyle(0xff3ec8, 1); g.fillTriangle(cx, cy - 14, cx + 11, cy, cx, cy + 3);
-    g.fillStyle(0xb02a8a, 1); g.fillTriangle(cx - 11, cy, cx, cy + 3, cx, cy + 15);
-    g.fillStyle(0xe05ab4, 1); g.fillTriangle(cx + 11, cy, cx, cy + 3, cx, cy + 15);
-    g.fillStyle(0xffffff, 1); g.fillCircle(cx, cy, 3.6);
-    g.fillStyle(0x3af5ff, 1); g.fillCircle(cx, cy, 1.8);
-  });
-
-  // ── pirate ship ──
-  tex(scene, "ship", 120, 52, (g) => {
-    g.fillStyle(0x141b30, 1);
-    g.fillPoints([P(4, 30), P(26, 18), P(60, 12), P(100, 16), P(116, 26), P(96, 36), P(40, 40)], true);
-    g.fillStyle(0x0c1122, 1);
-    g.fillPoints([P(34, 12), P(52, 2), P(60, 12)], true);
-    g.lineStyle(1.5, 0xff3ec8, 0.7);
-    g.beginPath(); g.moveTo(6, 31); g.lineTo(96, 35); g.strokePath();
-    [38, 58, 78].forEach((px) => { g.fillStyle(0xffc24d, 0.95); g.fillCircle(px, 24, 2.4); g.fillStyle(0xffc24d, 0.25); g.fillCircle(px, 24, 5); });
-    g.fillStyle(0x3af5ff, 0.9); g.fillCircle(8, 30, 3);
-    g.fillStyle(0x3af5ff, 0.25); g.fillCircle(8, 30, 7);
-    g.fillStyle(0x141b30, 1);
-    g.fillTriangle(96, 36, 108, 40, 100, 44);
-    g.fillTriangle(70, 39, 82, 42, 74, 47);
-  });
-
-  // ── props ──
-  tex(scene, "prop_lamp", 26, 66, (g) => {
-    g.fillStyle(0x2a3550, 1); g.fillRect(11, 14, 4, 48);
-    g.fillStyle(0x2a3550, 1); g.fillPoints(diamond(13, 62, 9, 4.5), true);
-    g.fillStyle(0x0b1430, 1); g.fillRoundedRect(4, 4, 18, 12, 3);
-    g.fillStyle(0x3af5ff, 1); g.fillRoundedRect(6, 6, 14, 8, 2);
-  });
-  tex(scene, "prop_tree", 52, 84, (g) => {
-    g.fillStyle(0x4e3421, 1); g.fillRect(23, 48, 7, 30);
-    const blobs: [number, number, number, number][] = [
-      [26, 30, 20, 0x1d5a4a], [14, 40, 13, 0x17453a], [38, 42, 14, 0x226150], [26, 18, 13, 0x226150],
-    ];
-    blobs.forEach(([x, y, r, c]) => { g.fillStyle(c, 1); g.fillCircle(x, y, r); });
-    const r2 = mulberry32(31);
-    for (let i = 0; i < 6; i++) { g.fillStyle(0x8fd96b, 0.7); g.fillCircle(10 + r2() * 32, 10 + r2() * 36, 1.4); }
-    g.fillStyle(0xff5ad1, 0.9); g.fillCircle(32, 26, 2); g.fillCircle(18, 34, 2);
-  });
-  tex(scene, "prop_rack", 42, 58, (g) => {
-    g.fillStyle(0x10162a, 1); g.fillRect(4, 6, 34, 46);
-    g.fillStyle(0x1a2340, 1); g.fillRect(4, 6, 34, 6);
-    g.lineStyle(1, 0x2a3550, 1); g.strokeRect(4, 6, 34, 46);
-    for (let i = 0; i < 4; i++) {
-      g.fillStyle(0x0b1020, 1); g.fillRect(8, 16 + i * 9, 26, 5);
-      g.fillStyle(i % 2 ? 0x3af5ff : 0xffc24d, 0.95); g.fillCircle(11, 18.5 + i * 9, 1.4);
-      g.fillStyle(0xff4d5e, 0.8); g.fillCircle(30, 18.5 + i * 9, 1.2);
+  // ── market terminal ─────────────────────────────
+  make("terminal", 88, 104, (g) => {
+    const cx = 44;
+    isoBox(g, cx, 96, 56, 30, "#1b2a52");
+    g.fillStyle(0x04121f, 1);
+    g.fillPoints([P(cx - 20, 96 - 30 - 24), P(cx + 4, 96 - 30 - 12), P(cx + 4, 96 - 30 + 6), P(cx - 20, 96 - 30 - 6)], true);
+    g.lineStyle(1.5, 0x3af5ff, 1);
+    g.strokePoints([P(cx - 20, 96 - 54), P(cx + 4, 96 - 42), P(cx + 4, 96 - 24), P(cx - 20, 96 - 36)], true);
+    for (let i = 0; i < 3; i++) {
+      g.lineStyle(1.5, i === 1 ? 0xff3ec8 : 0x3af5ff, 0.9);
+      g.lineBetween(cx - 16, 96 - 48 + i * 6, cx - 2, 96 - 41 + i * 6);
     }
+    g.lineStyle(2, 0xffc24d, 0.95); g.lineBetween(cx + 12, 96 - 30, cx + 12, 96 - 62);
+    g.fillStyle(0xffc24d, 1); g.fillCircle(cx + 12, 96 - 65, 3);
+    g.fillStyle(0x3af5ff, 0.25); g.fillCircle(cx + 12, 96 - 65, 6);
+    diamond(g, cx, 99, 60, 30, "#3af5ff", 0.12);
   });
 
-  // ── fx ──
-  tex(scene, "spark", 10, 10, (g) => {
-    g.fillStyle(0xffffff, 1); g.fillCircle(5, 5, 3);
-    g.fillStyle(0xffffff, 0.35); g.fillCircle(5, 5, 5);
-  });
-  tex(scene, "glow", 64, 64, (g) => {
-    for (let i = 8; i > 0; i--) { g.fillStyle(0xffffff, 0.045); g.fillCircle(32, 32, i * 4); }
-    g.fillStyle(0xffffff, 0.5); g.fillCircle(32, 32, 5);
-  });
-  tex(scene, "smoke", 14, 14, (g) => {
-    g.fillStyle(0xaab6cc, 0.5); g.fillCircle(7, 7, 5);
-    g.fillStyle(0xaab6cc, 0.25); g.fillCircle(7, 7, 7);
-  });
-  tex(scene, "rain", 2, 12, (g) => {
-    g.fillStyle(0x9fdcff, 0.7); g.fillRect(0, 0, 2, 12);
-  });
-  tex(scene, "shadow", 48, 24, (g) => {
-    g.fillStyle(0x000000, 0.35); g.fillEllipse(24, 12, 44, 20);
-  });
-  tex(scene, "stars", 1600, 900, (g) => {
-    const r2 = mulberry32(2024);
-    const neb: [number, number, number, number][] = [
-      [380, 260, 0x3af5ff, 150], [1150, 620, 0xff3ec8, 180], [800, 140, 0x6bff9e, 110], [1350, 180, 0xffc24d, 90],
-    ];
-    neb.forEach(([x, y, c, rad]) => {
-      for (let i = 10; i > 0; i--) { g.fillStyle(c, 0.012); g.fillCircle(x, y, (rad / 10) * i); }
+  // ── characters ──────────────────────────────────
+  const unit = (key: string, primary: string, glow: string, kind: "avatar" | "knight" | "lancer" | "golem") => {
+    const w = kind === "golem" ? 46 : 36, h = kind === "golem" ? 56 : 48;
+    make(key, w, h, (g) => {
+      const cx = w / 2, feet = h - 4;
+      diamond(g, cx, feet, w - 8, (w - 8) / 2, "#000000", 0.35);
+      isoBox(g, cx, feet - 2, kind === "golem" ? 30 : 20, kind === "golem" ? 26 : 18, shade(primary, 0.5));
+      isoBox(g, cx, feet - 2 - (kind === "golem" ? 26 : 18), kind === "golem" ? 24 : 16, kind === "golem" ? 18 : 14, primary);
+      if (kind === "golem") {
+        isoBox(g, cx - 16, feet - 20, 10, 14, shade(primary, 0.7));
+        isoBox(g, cx + 16, feet - 20, 10, 14, shade(primary, 0.7));
+        g.fillStyle(Phaser.Display.Color.HexStringToColor(glow).color, 1);
+        g.fillRect(cx - 3, feet - 36, 6, 6);
+        g.lineStyle(1.5, Phaser.Display.Color.HexStringToColor(glow).color, 0.9);
+        g.strokeRect(cx - 6, feet - 39, 12, 12);
+      } else {
+        g.fillStyle(Phaser.Display.Color.HexStringToColor(glow).color, 1);
+        if (kind === "lancer") {
+          g.fillRect(cx - 6, feet - 34, 4, 3); g.fillRect(cx + 2, feet - 34, 4, 3);
+          g.lineStyle(2, 0xe8f4ff, 1);
+          g.lineBetween(cx + 12, feet - 40, cx + 12, feet - 8);
+          g.lineStyle(1.5, Phaser.Display.Color.HexStringToColor(glow).color, 1);
+          g.lineBetween(cx + 12, feet - 40, cx + 20, feet - 24);
+          g.lineBetween(cx + 20, feet - 24, cx + 12, feet - 8);
+        } else {
+          g.fillRect(cx - 6, feet - 32, 12, 3);
+          if (kind === "knight") {
+            g.fillStyle(0xe8f4ff, 1);
+            g.fillPoints([P(cx + 12, feet - 6), P(cx + 15, feet - 6), P(cx + 15, feet - 30), P(cx + 13.5, feet - 36), P(cx + 12, feet - 30)], true);
+            g.fillStyle(Phaser.Display.Color.HexStringToColor(glow).color, 1);
+            g.fillRect(cx + 10, feet - 8, 7, 3);
+          } else {
+            g.lineStyle(2, Phaser.Display.Color.HexStringToColor(glow).color, 1);
+            g.lineBetween(cx + 10, feet - 10, cx + 10, feet - 34);
+          }
+        }
+      }
     });
-    for (let i = 0; i < 220; i++) {
-      const c = r2();
-      g.fillStyle(c > 0.85 ? 0xff9de6 : c > 0.6 ? 0x9fdcff : 0xffffff, 0.25 + r2() * 0.65);
-      g.fillCircle(r2() * 1600, r2() * 900, r2() > 0.9 ? 1.8 : 1);
+  };
+  unit("player", "#3af5ff", "#ffffff", "avatar");
+  unit("knight", "#3af5ff", "#9ff7ff", "knight");
+  unit("lancer", "#ff3ec8", "#ffd0f0", "lancer");
+  unit("golem", "#ffc24d", "#ffe2a8", "golem");
+
+  make("watcher", 34, 42, (g) => {
+    const cx = 17, feet = 38;
+    diamond(g, cx, feet, 22, 11, "#000000", 0.3);
+    g.lineStyle(1.5, 0xff5ad1, 0.9);
+    g.strokeCircle(cx, feet - 14, 9);
+    g.fillStyle(0xff5ad1, 0.2); g.fillCircle(cx, feet - 14, 9);
+    g.fillStyle(0xff5ad1, 1); g.fillCircle(cx, feet - 14, 3.5);
+    g.lineStyle(1, 0xff5ad1, 0.8);
+    g.lineBetween(cx, feet - 23, cx - 5, feet - 28);
+    g.lineBetween(cx, feet - 23, cx + 5, feet - 28);
+    g.fillStyle(0xff5ad1, 1);
+    g.fillCircle(cx - 5, feet - 28, 1.5); g.fillCircle(cx + 5, feet - 28, 1.5);
+  });
+
+  // ── turret ──────────────────────────────────────
+  make("turret", 56, 74, (g) => {
+    const cx = 28, feet = 68;
+    diamond(g, cx, feet, 48, 24, "#000000", 0.35);
+    isoBox(g, cx, feet - 2, 40, 16, "#2a3450");
+    isoBox(g, cx, feet - 18, 26, 10, "#3d4a70");
+    g.fillStyle(0x141b30, 1);
+    g.fillPoints([P(cx - 5, feet - 28), P(cx + 5, feet - 28), P(cx + 4, feet - 52), P(cx - 4, feet - 52)], true);
+    g.fillStyle(0x3af5ff, 1); g.fillRect(cx - 3, feet - 56, 6, 5);
+    g.fillStyle(0x3af5ff, 0.3); g.fillCircle(cx, feet - 54, 8);
+    g.lineStyle(1.5, 0x3af5ff, 0.8); g.strokeCircle(cx, feet - 8, 13);
+  });
+
+  // ── void citadel (CPU fortress) ─────────────────
+  make("citadel", 150, 190, (g) => {
+    const cx = 75;
+    diamond(g, cx, 178, 130, 65, "#1a0510", 0.9);
+    isoBox(g, cx, 168, 112, 74, "#2b1020");
+    isoBox(g, cx, 168 - 74, 112, 12, "#3d1830");
+    // spikes
+    g.fillStyle(0x120409, 1);
+    const spikes = [[cx - 44, 94, 26], [cx - 14, 88, 40], [cx + 18, 92, 30], [cx + 46, 98, 20]];
+    for (const [sx, sy, sh] of spikes) {
+      g.fillPoints([P(sx - 7, sy + 14), P(sx + 7, sy + 14), P(sx, sy + 14 - sh)], true);
     }
+    // eye
+    g.fillStyle(0x0a0208, 1);
+    g.fillPoints([P(cx - 22, 128), P(cx + 6, 114), P(cx + 6, 140), P(cx - 22, 154)], true);
+    g.fillStyle(0xff4d5e, 1); g.fillCircle(cx - 8, 134, 6);
+    g.fillStyle(0xffe0e0, 1); g.fillCircle(cx - 8, 134, 2);
+    g.fillStyle(0xff4d5e, 0.18); g.fillCircle(cx - 8, 134, 12);
+    // gate
+    g.fillStyle(0x0a0208, 1);
+    g.fillRect(cx - 16, 168 - 34, 32, 34);
+    g.lineStyle(2, 0xff4d5e, 0.8); g.strokeRect(cx - 16, 168 - 34, 32, 34);
+    g.lineStyle(1, 0xff4d5e, 0.5);
+    g.lineBetween(cx - 8, 168 - 34, cx - 8, 168); g.lineBetween(cx + 8, 168 - 34, cx + 8, 168);
+    // aura cracks
+    g.lineStyle(1.5, 0xff4d5e, 0.5);
+    g.lineBetween(cx - 56, 160, cx - 40, 150); g.lineBetween(cx + 52, 156, cx + 38, 148);
+  });
+
+  // ── bugs (enemies) ──────────────────────────────
+  make("keese", 32, 26, (g) => {
+    g.fillStyle(0x8a1626, 1);
+    g.fillPoints([P(2, 8), P(12, 4), P(13, 12)], true);
+    g.fillPoints([P(30, 8), P(20, 4), P(19, 12)], true);
+    isoBox(g, 16, 20, 14, 8, "#c22333");
+    g.fillStyle(0xffe066, 1); g.fillRect(12, 8, 3, 3); g.fillRect(18, 8, 3, 3);
+  });
+  make("wisp", 28, 28, (g) => {
+    g.fillStyle(0xd8e6ff, 0.25); g.fillCircle(14, 14, 12);
+    g.fillStyle(0xd8e6ff, 0.85); g.fillCircle(14, 14, 6);
+    g.fillStyle(0x27407a, 1); g.fillRect(10, 12, 3, 4); g.fillRect(16, 12, 3, 4);
+    g.lineStyle(1, 0xd8e6ff, 0.6); g.strokeCircle(14, 14, 10);
+  });
+  make("stalker", 30, 40, (g) => {
+    const cx = 15;
+    diamond(g, cx, 36, 20, 10, "#000000", 0.3);
+    g.fillStyle(0x5e0f1e, 1);
+    g.fillPoints([P(cx - 8, 34), P(cx + 8, 34), P(cx + 5, 14), P(cx - 5, 14)], true);
+    g.fillPoints([P(cx - 5, 14), P(cx + 5, 14), P(cx, 4)], true);
+    g.fillStyle(0xff4d5e, 1); g.fillRect(cx - 4, 12, 8, 2);
+    g.lineStyle(1.5, 0xff4d5e, 0.8);
+    g.lineBetween(cx + 6, 30, cx + 14, 20); g.lineBetween(cx - 6, 30, cx - 14, 20);
+  });
+  make("behemoth", 66, 62, (g) => {
+    const cx = 33;
+    diamond(g, cx, 56, 56, 28, "#000000", 0.35);
+    isoBox(g, cx, 52, 52, 30, "#3b1030");
+    isoBox(g, cx, 52 - 30, 52, 16, "#521741");
+    g.lineStyle(2, 0xff4d5e, 0.7);
+    g.lineBetween(cx - 18, 44, cx - 8, 36); g.lineBetween(cx - 8, 36, cx - 14, 28);
+    g.lineBetween(cx + 14, 46, cx + 6, 38);
+    g.fillStyle(0xffe066, 1);
+    g.fillCircle(cx - 10, 18, 3); g.fillCircle(cx + 2, 16, 3); g.fillCircle(cx + 12, 20, 2.4);
+    isoBox(g, cx - 28, 40, 14, 12, "#521741");
+    isoBox(g, cx + 28, 40, 14, 12, "#521741");
+  });
+
+  // ── FX / markers ────────────────────────────────
+  make("portal", 76, 42, (g) => {
+    g.lineStyle(3, 0xff4d5e, 0.9); g.strokeEllipse(38, 21, 64, 32);
+    g.lineStyle(2, 0xff8a94, 0.7); g.strokeEllipse(38, 21, 44, 22);
+    g.fillStyle(0xff4d5e, 0.14); g.fillEllipse(38, 21, 64, 32);
+    g.fillStyle(0xffe0e0, 0.9); g.fillCircle(38, 21, 3);
+  });
+  make("bolt", 18, 18, (g) => {
+    g.fillStyle(0x3af5ff, 0.35); g.fillCircle(9, 9, 8);
+    diamond(g, 9, 9, 10, 10, "#bffbff", 1);
+  });
+  make("ebolt", 16, 16, (g) => {
+    g.fillStyle(0xff4d5e, 0.35); g.fillCircle(8, 8, 7);
+    diamond(g, 8, 8, 8, 8, "#ffb3ba", 1);
+  });
+  make("selring", 52, 28, (g) => {
+    g.lineStyle(2, 0x3af5ff, 0.95); g.strokeEllipse(26, 14, 46, 24);
+    g.lineStyle(1, 0x3af5ff, 0.4); g.strokeEllipse(26, 14, 52, 28);
+  });
+  make("targetring", 52, 28, (g) => {
+    g.lineStyle(2, 0xff4d5e, 0.95); g.strokeEllipse(26, 14, 46, 24);
+  });
+  make("movering", 26, 14, (g) => {
+    g.lineStyle(2, 0x6bff9e, 0.9); g.strokeEllipse(13, 7, 20, 10);
+  });
+  make("spark", 14, 14, (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillPoints([P(7, 0), P(9, 5), P(14, 7), P(9, 9), P(7, 14), P(5, 9), P(0, 7), P(5, 5)], true);
+  });
+  make("glow", 64, 64, (g) => {
+    for (let i = 6; i > 0; i--) {
+      g.fillStyle(0xffffff, 0.05);
+      g.fillCircle(32, 32, i * 5);
+    }
+  });
+  make("star", 3, 3, (g) => { g.fillStyle(0xffffff, 1); g.fillRect(0, 0, 3, 3); });
+
+  // ── props ───────────────────────────────────────
+  make("lamp", 24, 58, (g) => {
+    g.fillStyle(0x22304f, 1); g.fillRect(10, 18, 4, 36);
+    diamond(g, 12, 56, 16, 8, "#1a2540", 1);
+    g.fillStyle(0xffc24d, 1); g.fillCircle(12, 12, 5);
+    g.fillStyle(0xffc24d, 0.18); g.fillCircle(12, 12, 11);
+  });
+  make("holotree", 34, 62, (g) => {
+    g.fillStyle(0x16233f, 1); g.fillRect(14, 38, 6, 20);
+    g.lineStyle(1.5, 0x3af5ff, 0.7);
+    g.strokeTriangle(17, 6, 4, 40, 30, 40);
+    g.lineStyle(1.5, 0x3af5ff, 0.45);
+    g.strokeTriangle(17, 18, 8, 42, 26, 42);
+    g.fillStyle(0x3af5ff, 0.12); g.fillTriangle(17, 6, 4, 40, 30, 40);
+    g.fillStyle(0x9ff7ff, 0.9); g.fillCircle(17, 6, 2);
   });
 }

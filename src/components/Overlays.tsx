@@ -13,7 +13,6 @@ export function HouseGlyph({ type, size = 120 }: { type: HouseId; size?: number 
 
   return (
     <svg width={size} height={size * 1.18} viewBox="0 0 160 190">
-      {/* pedestal */}
       <polygon points="80,182 146,152 80,122 14,152" {...fillDark} stroke={c.primary} strokeOpacity={0.35} strokeWidth={1} />
       {type === "neon" && (
         <g>
@@ -77,37 +76,45 @@ const YieldChip = ({ y }: { y: { p: number; l: number; t: number } }) => {
   return <span className="font-mono text-[10px] text-[#6f86b8]">{parts.join(" · ")}</span>;
 };
 
+const CtrlRow = ({ keys, desc }: { keys: string[]; desc: string }) => (
+  <>
+    <div className="flex gap-1 flex-wrap">{keys.map((k) => <span className="kbd" key={k}>{k}</span>)}</div>
+    <span>{desc}</span>
+  </>
+);
+
 // ─────────────────────────── BOOT SCREEN ───────────────────────────
 const BOOT_LINES = [
   "> GSK v0.5.1 :: GRAND SOUL KERNEL ONLINE",
   "> mounting /src as CAPITAL BIOME ............ OK",
   "> quarantining /node_modules dark forest .... OK",
-  "> seeding FOG OF WAR over untested paths .... OK",
+  "> WAR PROTOCOL :: 3 VOID CITADELS detected beyond the barrier",
+  "> bug signatures :: keese · wisp · stalker · behemoth",
+  "> soul weapons charged :: BLADE / ARROW / SHIELD / CANNON",
   "> PLT ledger synchronized [PROFIT·LOVE·TAX]",
-  "> exchange rate locked :: $1 = 12 PLT",
-  "> decree 7 :: deposits split 60/20/20 — wallet / GSK treasury / entropy burn",
-  "> genesis plot 16×16 detected — awaiting avatar…",
+  "> decree 12 :: deposits split 60/20/20 — wallet / GSK treasury / entropy burn",
+  "> genesis plot 16×16 armed — awaiting commander…",
 ];
 
 export function BootScreen({ onStart }: { onStart: () => void }) {
   const [lines, setLines] = useState(0);
   useEffect(() => {
-    const iv = setInterval(() => setLines((n) => (n >= BOOT_LINES.length ? n : n + 1)), 300);
+    const iv = setInterval(() => setLines((n) => (n >= BOOT_LINES.length ? n : n + 1)), 260);
     return () => clearInterval(iv);
   }, []);
 
   return (
     <div className="absolute inset-0 z-20 bg-[rgba(3,5,13,0.82)] flex flex-col">
-      <div className="flex-1 grid grid-cols-[1.25fr_1fr] gap-8 p-10 max-w-[1180px] w-full mx-auto items-center">
+      <div className="flex-1 grid grid-cols-[1.2fr_1fr] gap-8 p-10 max-w-[1240px] w-full mx-auto items-center">
         <div>
-          <div className="font-mono text-[11px] text-[#ff3ec8] tracking-[0.3em] mb-3">PROJECT // 2D SPATIAL OPERATING SYSTEM</div>
-          <h1 className="font-display text-[86px] leading-[0.95] text-[#eaffff] title-glow">SOUL<br />FEILD</h1>
-          <p className="font-body text-[15px] text-[#9fb4dd] mt-4 max-w-[420px] leading-relaxed">
-            The map is a filesystem. The units are agents. The fog is untested code — and the economy runs on
-            <span className="text-[#ffc24d]"> PROFIT</span>, <span className="text-[#ff5ad1]">LOVE</span> and <span className="text-[#ff4d5e]">TAX</span>.
-            Claim a house. Build the block. Survive the audits.
+          <div className="font-mono text-[11px] text-[#ff3ec8] tracking-[0.3em] mb-3">PROJECT // 2D SPATIAL OPERATING SYSTEM + WAR PROTOCOL</div>
+          <h1 className="font-display text-[78px] leading-[0.95] text-[#eaffff] title-glow">SOUL<br />FEILD</h1>
+          <p className="font-body text-[15px] text-[#9fb4dd] mt-4 max-w-[440px] leading-relaxed">
+            The map is a filesystem. The units are agents. The fog is untested code — and beyond the barrier,
+            <span className="text-[#ff4d5e]"> three Void Citadels are compiling bugs against you</span>. Build the economy,
+            raise an army of <span className="text-[#3af5ff]">Compiler Knights</span> and <span className="text-[#ff3ec8]">Hex Lancers</span>, and purge the source.
           </p>
-          <div className="mt-6 holo-panel p-4 font-mono text-[11px] leading-[1.8] text-[#7ee7f5] min-h-[196px]">
+          <div className="mt-6 holo-panel p-4 font-mono text-[11px] leading-[1.75] text-[#7ee7f5] min-h-[210px]">
             {BOOT_LINES.slice(0, lines).map((l, i) => <div key={i}>{l}</div>)}
             {lines < BOOT_LINES.length ? <span className="caret text-[#3af5ff]">▊</span> : (
               <button onClick={onStart} className="btn-holo px-6 py-3 text-[13px] mt-3 inline-block">
@@ -117,29 +124,31 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="holo-panel p-5">
-            <div className="font-display text-[11px] text-[#3af5ff] mb-3">CONTROL PROTOCOL</div>
-            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 font-body text-[13px] text-[#cfe3ff] items-center">
-              <div className="flex gap-1"><span className="kbd">W</span><span className="kbd">A</span><span className="kbd">S</span><span className="kbd">D</span></div><span>isometric movement (screen-aligned)</span>
-              <span className="kbd">SCROLL</span><span>zoom the spatial layer</span>
-              <span className="kbd">E</span><span>interact — market terminal / agents</span>
-              <span className="kbd">ESC</span><span>pause simulation</span>
-              <span className="kbd">M</span><span>toggle audio channel</span>
+        <div className="space-y-3">
+          <div className="holo-panel p-4">
+            <div className="font-display text-[11px] text-[#3af5ff] mb-2.5">CONTROL PROTOCOL</div>
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 font-body text-[12.5px] text-[#cfe3ff] items-center">
+              <CtrlRow keys={["W", "A", "S", "D"]} desc="isometric movement" />
+              <CtrlRow keys={["L-DRAG"]} desc="select units (click or box)" />
+              <CtrlRow keys={["R-CLICK"]} desc="move / attack bugs / siege citadels" />
+              <CtrlRow keys={["1", "2", "3", "4"]} desc="arm Soul Weapons" />
+              <CtrlRow keys={["5", "6", "7"]} desc="forge Knight / Lancer / Golem" />
+              <CtrlRow keys={["T"]} desc="build defense turret" />
+              <CtrlRow keys={["Q", "X", "F"]} desc="attack-move / stop / follow" />
+              <CtrlRow keys={["E"]} desc="market terminal / A2A handshake" />
+              <CtrlRow keys={["ESC", "SCROLL", "M"]} desc="pause / zoom / mute" />
             </div>
           </div>
-          <div className="holo-panel p-5">
-            <div className="font-display text-[11px] text-[#ff3ec8] mb-2">MILESTONE 1 :: PHASES 1–5</div>
+          <div className="holo-panel p-4">
+            <div className="font-display text-[11px] text-[#ff3ec8] mb-2">VICTORY CONDITIONS</div>
             <ul className="font-mono text-[10.5px] text-[#8fa5d8] space-y-1.5 leading-snug">
-              <li>01 · isometric canvas — 2:1 diamond grid, 16×16</li>
-              <li>02 · camera follow, edge-scroll, wheel zoom</li>
-              <li>03 · three house archetypes rendered in-perspective</li>
-              <li>04 · PLT real-estate market + sovereign exchange</li>
-              <li>05 · NPC neighbor, safe-zone barrier, the Void</li>
+              <li><span className="text-[#3af5ff]">WAR ::</span> destroy all 3 Void Citadels beyond the barrier</li>
+              <li><span className="text-[#ffc24d]">GENESIS ::</span> own {OBJECTIVE.housesNeeded} houses + {fmt(OBJECTIVE.netWorthNeeded)} PLT net worth</li>
+              <li><span className="text-[#ff4d5e]">DEFEAT ::</span> base integrity hits zero (audits + raids)</li>
             </ul>
           </div>
           <div className="font-mono text-[9.5px] text-[#42557f] px-1">
-            GRAND CODE POPE DECREE #12 :: fiat/crypto deposits follow the Sovereign Split — 60% to your wallet, 20% to the GSK treasury (server upkeep), 20% burned to reduce global entropy.
+            GRAND CODE POPE DECREE #12 :: fiat/crypto deposits follow the Sovereign Split — 60% wallet, 20% GSK treasury, 20% entropy burn.
           </div>
         </div>
       </div>
@@ -149,7 +158,7 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
             <span key={k} className="flex gap-12">
               <span>DIRECTORY = BIOME</span><span className="text-[#3af5ff]">◆</span><span>UNIT = AGENT</span><span className="text-[#ff3ec8]">◆</span>
               <span>FOG = UNTESTED CODE</span><span className="text-[#3af5ff]">◆</span><span>MONSTER = BUG</span><span className="text-[#ff3ec8]">◆</span>
-              <span>ECONOMY = PROFIT · LOVE · TAX</span><span className="text-[#3af5ff]">◆</span><span>TERMINALS ARE REAL</span><span className="text-[#ff3ec8]">◆</span>
+              <span>ECONOMY = PROFIT · LOVE · TAX</span><span className="text-[#3af5ff]">◆</span><span>CPU = THE VOID SWARM</span><span className="text-[#ff3ec8]">◆</span>
               <span>src/ IS THE CAPITAL</span><span className="text-[#3af5ff]">◆</span><span>node_modules/ IS THE DARK FOREST</span><span className="text-[#ff3ec8]">◆</span>
             </span>
           ))}
@@ -185,9 +194,9 @@ export function HouseSelect({ onClaim }: { onClaim: (id: HouseId) => void }) {
         <div className="grid grid-cols-[1fr_400px] gap-6">
           <div className="holo-panel p-8 flex flex-col items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 opacity-40" style={{ background: `radial-gradient(circle at 50% 60%, ${def.colors.primary}22, transparent 60%)` }} />
-            <div className="bob-float"><HouseGlyph type={sel} size={250} /></div>
+            <div className="bob-float"><HouseGlyph type={sel} size={240} /></div>
             <div className="font-display text-[22px] mt-4" style={{ color: def.colors.primary }}>{def.name}</div>
-            <div className="font-mono text-[10px] text-[#6f86b8] tracking-[0.25em] mt-1">{def.archetype.toUpperCase()} ARCHETYPE</div>
+            <div className="font-mono text-[10px] text-[#6f86b8] tracking-[0.25em] mt-1">{def.archetype.toUpperCase()} ARCHETYPE · +2 SUPPLY</div>
             <p className="font-body text-[13px] text-[#9fb4dd] mt-3 text-center max-w-[360px]">{def.tagline}</p>
             <div className="flex gap-3 mt-5">
               <CostChip resource={def.cost.resource} amount={0} />
@@ -224,8 +233,8 @@ export function HouseSelect({ onClaim }: { onClaim: (id: HouseId) => void }) {
               );
             })}
             <div className="holo-panel-sm p-4 font-mono text-[10px] text-[#8fa5d8] leading-relaxed">
-              Each structure ships with a <span className="text-[#ff3ec8]">resident agent</span> that maintains it.
-              Two additional plots are for sale at the <span className="text-[#3af5ff]">MARKET TERMINAL</span> — pay in PLT.
+              Houses raise your <span className="text-[#9fdcff]">SUPPLY CAP</span> for the army and generate PLT every second.
+              Two more plots are for sale at the <span className="text-[#3af5ff]">MARKET TERMINAL</span> — and the Void is already raiding.
             </div>
           </div>
         </div>
@@ -270,7 +279,7 @@ export function MarketTerminal({ snap, onClose, onBuy, onDeposit, onSettle }: Ma
         <div className="flex items-center gap-4 px-6 pt-5 pb-4 border-b border-[#1c2c52]">
           <div className="flex-1">
             <div className="font-display text-[20px] text-[#3af5ff]" style={{ textShadow: "0 0 16px rgba(58,245,255,.5)" }}>MARKET TERMINAL</div>
-            <div className="font-mono text-[9.5px] text-[#6f86b8] tracking-[0.2em] mt-1">SOVEREIGN EXCHANGE // GSK RELAY 07 // {snap.plotsFree} PLOTS VACANT</div>
+            <div className="font-mono text-[9.5px] text-[#6f86b8] tracking-[0.2em] mt-1">SOVEREIGN EXCHANGE // GSK RELAY 07 // {snap.plotsFree} PLOTS VACANT // SUPPLY {snap.supply}/{snap.supplyMax}</div>
           </div>
           <div className="flex gap-2 font-mono text-[11px]">
             <span className="px-2 py-1 border border-[#ffc24d44] text-[#ffc24d]">{fmt(snap.p)} P</span>
@@ -302,6 +311,7 @@ export function MarketTerminal({ snap, onClose, onBuy, onDeposit, onSettle }: Ma
                       <div className="flex items-center gap-3">
                         <span className="font-display text-[15px]" style={{ color: d.colors.primary }}>{d.name}</span>
                         <CostChip resource={d.cost.resource} amount={d.cost.amount} />
+                        <span className="font-mono text-[9px] text-[#9fdcff] border border-[#9fdcff44] px-1.5 py-0.5">+2 SUPPLY</span>
                       </div>
                       <p className="font-body text-[12px] text-[#8fa5d8] mt-1 leading-snug">{d.tagline}</p>
                       <div className="mt-1.5"><YieldChip y={d.yields} /></div>
@@ -320,7 +330,7 @@ export function MarketTerminal({ snap, onClose, onBuy, onDeposit, onSettle }: Ma
                 );
               })}
               <div className="font-mono text-[9.5px] text-[#42557f] pt-1">
-                Purchased structures materialize on the next vacant plot with a resident agent. Win condition: {OBJECTIVE.housesNeeded} structures + {fmt(OBJECTIVE.netWorthNeeded)} net worth.
+                Turrets are forged from the hotbar <span className="kbd">T</span> near your avatar. Win: {OBJECTIVE.housesNeeded} structures + {fmt(OBJECTIVE.netWorthNeeded)} net worth — or purge every citadel.
               </div>
             </div>
           )}
@@ -375,7 +385,7 @@ export function MarketTerminal({ snap, onClose, onBuy, onDeposit, onSettle }: Ma
             <div className="grid grid-cols-[1fr_300px] gap-6 items-start">
               <div>
                 <p className="font-body text-[13px] text-[#9fb4dd] leading-relaxed">
-                  TAX is entropy — it accumulates from structures and <span className="text-[#ff4d5e]">Sentinel audits</span>.
+                  TAX is entropy — it accumulates from structures, turrets and <span className="text-[#ff4d5e]">Sentinel audits</span>.
                   When <span className="font-mono text-[#ff4d5e]">TAX &gt; PROFIT + LOVE</span>, your base integrity drains.
                   Settle the ledger by dissolving tax proportionally across your Profit and Love reserves.
                 </p>
@@ -410,14 +420,14 @@ export function MarketTerminal({ snap, onClose, onBuy, onDeposit, onSettle }: Ma
 export function PauseScreen({ onResume, onReboot }: { onResume: () => void; onReboot: () => void }) {
   return (
     <div className="absolute inset-0 z-20 bg-[rgba(2,4,10,0.72)] backdrop-blur-[2px] flex items-center justify-center">
-      <div className="holo-panel p-10 w-[440px] text-center rise-in">
+      <div className="holo-panel p-10 w-[500px] text-center rise-in">
         <div className="font-display text-[26px] text-[#3af5ff] title-glow">PAUSED</div>
         <div className="font-mono text-[10px] text-[#6f86b8] tracking-[0.25em] mt-1">SIMULATION SUSPENDED · THE VOID WAITS</div>
-        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 font-body text-[13px] text-[#cfe3ff] items-center text-left mt-6 justify-center w-fit mx-auto">
-          <div className="flex gap-1"><span className="kbd">W</span><span className="kbd">A</span><span className="kbd">S</span><span className="kbd">D</span></div><span>move</span>
-          <span className="kbd">E</span><span>interact</span>
-          <span className="kbd">SCROLL</span><span>zoom</span>
-          <span className="kbd">M</span><span>mute</span>
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 font-body text-[12.5px] text-[#cfe3ff] items-center text-left mt-6 justify-center w-fit mx-auto">
+          <CtrlRow keys={["W", "A", "S", "D"]} desc="move" />
+          <CtrlRow keys={["L-DRAG", "R-CLICK"]} desc="select / command army" />
+          <CtrlRow keys={["1-4", "5-7", "T"]} desc="weapons / forge / turret" />
+          <CtrlRow keys={["E", "SCROLL", "M"]} desc="interact / zoom / mute" />
         </div>
         <div className="flex gap-3 justify-center mt-8">
           <button onClick={onResume} className="btn-holo px-7 py-3 text-[13px]">► RESUME</button>
@@ -430,27 +440,34 @@ export function PauseScreen({ onResume, onReboot }: { onResume: () => void; onRe
 
 export function EndScreen({ stats, onReboot, onSandbox }: { stats: EndStats; onReboot: () => void; onSandbox: () => void }) {
   const win = stats.win;
+  const accent = win ? (stats.warVictory ? "#ff3ec8" : "#3af5ff") : "#ff4d5e";
   const rows: [string, string][] = [
     ["TIME IN SIMULATION", `${stats.timePlayed}s`],
     ["FINAL NET WORTH", fmt(stats.netWorth)],
+    ["BUGS EXTERMINATED", `${stats.kills}`],
+    ["RAIDS SURVIVED", `${stats.waves}`],
+    ["CITADELS PURGED", `${stats.citadelsDestroyed}/3`],
+    ["UNITS FORGED", `${stats.unitsBuilt}`],
     ["STRUCTURES OWNED", `${stats.owned}`],
     ["AUDITS SURVIVED", `${stats.audits}`],
     ["PLT EXCHANGED", fmt(stats.depositsPlt)],
     ["A2A HANDSHAKES", `${stats.handshakes}`],
   ];
   return (
-    <div className="absolute inset-0 z-30 bg-[rgba(2,4,10,0.8)] backdrop-blur-[3px] flex items-center justify-center">
-      <div className="holo-panel p-10 w-[520px] text-center rise-in" style={{ borderColor: win ? "#3af5ff66" : "#ff4d5e66" }}>
+    <div className="absolute inset-0 z-30 bg-[rgba(2,4,10,0.8)] backdrop-blur-[3px] flex items-center justify-center p-6">
+      <div className="holo-panel p-10 w-[560px] text-center rise-in" style={{ borderColor: `${accent}66` }}>
         <div className="font-mono text-[10px] tracking-[0.3em] mb-2" style={{ color: win ? "#ff3ec8" : "#ff4d5e" }}>
-          {win ? "MILESTONE 1 // PHASE 5 CLEARED" : "ENTROPY CASCADE // BASE LOST"}
+          {win ? (stats.warVictory ? "WAR PROTOCOL // COMPLETE" : "MILESTONE 1 // PHASE 5 CLEARED") : "ENTROPY CASCADE // BASE LOST"}
         </div>
-        <div className="font-display text-[40px] leading-tight" style={{ color: win ? "#3af5ff" : "#ff4d5e", textShadow: `0 0 26px ${win ? "rgba(58,245,255,.6)" : "rgba(255,77,94,.6)"}` }}>
-          {win ? "GENESIS COMPLETE" : "CONSUMED BY TAX"}
+        <div className="font-display text-[38px] leading-tight" style={{ color: accent, textShadow: `0 0 26px ${accent}99` }}>
+          {win ? (stats.warVictory ? "THE VOID IS PURGED" : "GENESIS COMPLETE") : "CONSUMED BY TAX"}
         </div>
         <p className="font-body text-[13px] text-[#9fb4dd] mt-3">
           {win
-            ? "The Genesis Plot thrives. Three structures hum on the grid, the ledger is sovereign, and the Void pirates sail on, denied."
-            : "The Sentinel's audits outpaced your reserves. The barrier dims, the ledger closes — but the kernel remembers."}
+            ? stats.warVictory
+              ? "All three citadels are smoking craters. The bug compilations halt, the barrier hums quiet, and the ledger bows to you."
+              : "The Genesis Plot thrives. Three structures hum on the grid and the ledger is sovereign — though the citadels still watch."
+            : "The Sentinel's audits and the Void's raids outpaced your reserves. The barrier dims, the ledger closes — but the kernel remembers."}
         </p>
         <div className="grid grid-cols-2 gap-x-8 gap-y-2 mt-7 text-left font-mono text-[11px]">
           {rows.map(([k, v]) => (
@@ -460,7 +477,7 @@ export function EndScreen({ stats, onReboot, onSandbox }: { stats: EndStats; onR
           ))}
         </div>
         <div className="flex gap-3 justify-center mt-8">
-          {win && <button onClick={onSandbox} className="btn-holo px-7 py-3 text-[13px]">∞ KEEP BUILDING</button>}
+          {win && <button onClick={onSandbox} className="btn-holo px-7 py-3 text-[13px]">∞ KEEP WARRING</button>}
           <button onClick={onReboot} className={`btn-holo ${win ? "btn-magenta" : ""} px-7 py-3 text-[13px]`}>↻ {win ? "REBOOT SIMULATION" : "TRY AGAIN"}</button>
         </div>
       </div>
