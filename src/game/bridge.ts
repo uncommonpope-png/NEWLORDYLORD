@@ -8,7 +8,7 @@ import Phaser from "phaser";
 // ── world constants ──────────────────────────────────────────────────
 export const TILE_W = 64;
 export const TILE_H = 32;
-export const GRID = 16;
+export const GRID = 40;
 
 export const cartToIso = (col: number, row: number) => ({
   x: (col - row) * (TILE_W / 2),
@@ -64,7 +64,7 @@ export const HOUSE_DEFS: Record<HouseId, HouseDef> = {
 };
 
 // ── army :: production units ─────────────────────────────────────────
-export type UnitId = "knight" | "lancer" | "golem";
+export type UnitId = "knight" | "lancer" | "golem" | "gleaner";
 
 export interface UnitDef {
   id: UnitId;
@@ -81,6 +81,7 @@ export interface UnitDef {
   desc: string;
   color: string;
   ranged: boolean;
+  worker?: boolean;
 }
 
 export const UNIT_DEFS: Record<UnitId, UnitDef> = {
@@ -98,6 +99,11 @@ export const UNIT_DEFS: Record<UnitId, UnitDef> = {
     id: "golem", name: "Refactor Golem", hp: 210, dmg: 16, range: 46, atkCd: 1.25,
     speed: 62, radius: 16, supply: 2, cost: { p: 150, l: 0, t: 40 }, key: "7",
     desc: "Heavy tank. Absorbs entropy so others don't have to.", color: "#ffc24d", ranged: false,
+  },
+  gleaner: {
+    id: "gleaner", name: "Gleaner Drone", hp: 34, dmg: 0, range: 0, atkCd: 99,
+    speed: 118, radius: 9, supply: 1, cost: { p: 60, l: 0, t: 0 }, key: "8",
+    desc: "Worker NPC. Send it to Data Crystals / Heart Blooms to harvest PLT.", color: "#6bff9e", ranged: false, worker: true,
   },
 };
 
@@ -170,6 +176,11 @@ export interface PltSnapshot {
   buildings3d: { kind: string; label: string; x: number; y: number; hp: number; hpMax: number; color: string }[];
   motes: { x: number; y: number; t: "unit" | "enemy" }[];
   drumActive: boolean;
+  workers: number;
+  nodesLeft: number;
+  nodesMini: { x: number; y: number; kind: string }[];
+  citadelsDown: number;
+  citadelsTotal: number;
 }
 
 export type BridgeCommands = {
@@ -180,6 +191,7 @@ export type BridgeCommands = {
   prod: { unit: UnitId };
   arm: { id: WeaponId | null };
   buildTurret: {};
+  rallyAll: {};
   resume: {};
   pause: {};
   reboot: {};

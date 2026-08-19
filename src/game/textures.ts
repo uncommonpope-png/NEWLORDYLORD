@@ -218,6 +218,18 @@ export function createTextures(scene: Phaser.Scene) {
   unit("knight", "#3af5ff", "#9ff7ff", "knight");
   unit("lancer", "#ff3ec8", "#ffd0f0", "lancer");
   unit("golem", "#ffc24d", "#ffe2a8", "golem");
+  make("gleaner", 30, 30, (g) => {
+    diamond(g, 15, 27, 18, 8, "#000000", 0.28);
+    g.fillStyle(0x173324, 1); g.fillCircle(15, 15, 7.5);
+    g.lineStyle(1.5, 0x6bff9e, 0.95); g.strokeCircle(15, 15, 7.5);
+    g.fillStyle(0x6bff9e, 0.25); g.fillCircle(15, 15, 7.5);
+    g.lineStyle(1.2, 0x9fdcff, 0.8);
+    g.lineBetween(8, 10, 3, 5); g.lineBetween(22, 10, 27, 5);
+    g.lineBetween(8, 20, 3, 25); g.lineBetween(22, 20, 27, 25);
+    g.fillStyle(0x9fdcff, 0.9);
+    g.fillCircle(3, 5, 2); g.fillCircle(27, 5, 2); g.fillCircle(3, 25, 2); g.fillCircle(27, 25, 2);
+    g.fillStyle(0xeaffff, 1); g.fillCircle(15, 15, 2.2);
+  });
 
   make("watcher", 34, 42, (g) => {
     const cx = 17, feet = 38;
@@ -273,6 +285,31 @@ export function createTextures(scene: Phaser.Scene) {
     // aura cracks
     g.lineStyle(1.5, 0xff4d5e, 0.5);
     g.lineBetween(cx - 56, 160, cx - 40, 150); g.lineBetween(cx + 52, 156, cx + 38, 148);
+  });
+
+  // ── resource nodes ──────────────────────────────
+  make("crystal", 44, 52, (g) => {
+    diamond(g, 22, 46, 30, 15, "#0c2233", 0.85);
+    const shard = (x: number, y: number, w: number, h: number, c: number, a = 1) => {
+      g.fillStyle(c, a);
+      g.fillPoints([P(x, y), P(x + w, y + h * 0.4), P(x, y + h), P(x - w, y + h * 0.4)], true);
+    };
+    shard(22, 4, 7, 34, 0x123c55); shard(22, 4, 4.5, 34, 0x3af5ff, 0.95);
+    shard(12, 16, 5, 24, 0x0f3148); shard(12, 16, 3, 24, 0x6fd8ff, 0.9);
+    shard(32, 14, 5, 26, 0x0f3148); shard(32, 14, 3, 26, 0x6fd8ff, 0.9);
+    g.fillStyle(0xeaffff, 0.9); g.fillRect(20, 8, 2, 6); g.fillRect(31, 18, 2, 4);
+  });
+  make("bloom", 40, 46, (g) => {
+    diamond(g, 20, 40, 26, 13, "#2a1530", 0.85);
+    g.lineStyle(2, 0x4e7d3a, 1); g.lineBetween(20, 40, 20, 20);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      g.fillStyle(0xff5ad1, 0.92);
+      g.fillCircle(20 + Math.cos(a) * 7, 16 + Math.sin(a) * 5.5, 4.4);
+    }
+    g.fillStyle(0xffd1f0, 1); g.fillCircle(20, 16, 4);
+    g.fillStyle(0xffc24d, 1); g.fillCircle(20, 16, 1.8);
+    g.fillStyle(0x8fd96b, 1); g.fillCircle(13, 32, 2.4); g.fillCircle(27, 34, 2);
   });
 
   // ── bugs (enemies) ──────────────────────────────

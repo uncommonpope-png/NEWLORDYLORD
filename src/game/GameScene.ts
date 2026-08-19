@@ -22,12 +22,15 @@ const ENEMY_DEFS: Record<EnemyId, EnemyDef> = {
   stalker:  { name: "Race Stalker",   hp: 72,  dmg: 11, range: 38, atkCd: 0.85, speed: 120, radius: 12, loot: 24, tex: "stalker",  barY: 42 },
   behemoth: { name: "Leak Behemoth",  hp: 280, dmg: 20, range: 48, atkCd: 1.4,  speed: 46,  radius: 20, loot: 95, tex: "behemoth", barY: 62 },
 };
-const ENEMY_BARY: Record<string, number> = { knight: 48, lancer: 48, golem: 58, avatar: 48 };
+const ENEMY_BARY: Record<string, number> = { knight: 48, lancer: 48, golem: 58, avatar: 48, gleaner: 34 };
 
 const CITADEL_SPOTS = [
-  { c: -4, r: -4, hp: 650 },
-  { c: 19, r: -4, hp: 850 },
-  { c: 19, r: 19, hp: 1100 },
+  { c: 6, r: 6, hp: 650 },
+  { c: 33, r: 5, hp: 850 },
+  { c: 34, r: 33, hp: 1100 },
+  { c: 5, r: 34, hp: 1300 },
+  { c: 20, r: 1, hp: 1500 },
+  { c: 1, r: 20, hp: 1800 },
 ];
 
 // ── entity types ─────────────────────────────────────────────────────
@@ -61,6 +64,23 @@ interface Fighter {
   bobSeed: number;
   dead: boolean;
   hpDirty: boolean;
+  worker: boolean;
+  cargo: number;
+  cargoKind: "p" | "l";
+  gatherId: number | null;
+  gState: "idle" | "toNode" | "mine" | "toDrop";
+  mineT: number;
+}
+
+interface ResNode {
+  id: number;
+  kind: "crystal" | "bloom";
+  c: number; r: number;
+  x: number; y: number;
+  amount: number; max: number;
+  sprite: Phaser.GameObjects.Image;
+  glow: Phaser.GameObjects.Image;
+  dead: boolean;
 }
 
 interface Building {
@@ -99,7 +119,7 @@ interface Blast { x: number; y: number; t: number; r: number; dmg: number; hit: 
 export class GameScene extends Phaser.Scene {
   // world
   private solids: boolean[][] = [];
-  private walkExtents = { minC: -6, maxC: 21, minR: -6, maxR: 21 };
+  private walkExtents = { minC: -4, maxC: 44, minR: -4, maxR: 44 };
   private groundTiles: Phaser.GameObjects.Image[] = [];
   private parallax: { obj: Phaser.GameObjects.Image; f: number; bx: number; by: number }[] = [];
   private worldBounds = { x: 0, y: 0, w: 0, h: 0 };
@@ -150,6 +170,8 @@ export class GameScene extends Phaser.Scene {
   private integrity = START_INTEGRITY;
   private owned: { type: HouseId; buildingId: number }[] = [];
   private plots: { c: number; r: number; claimed: boolean; houseType?: HouseId }[] = [];
+  private nodes: ResNode[] = [];
+  private gleanerHinted = false;
   private auditTimer = 45;
   private audits = 0;
   private depositsPlt = 0;
@@ -199,6 +221,7 @@ export class GameScene extends Phaser.Scene {
     this.buildBarrier();
     this.buildTerminal();
     this.buildCitadels();
+    this.buildNodes();
     this.buildPlayer();
     this.buildNpc();
     this.buildCamera();
@@ -209,9 +232,11 @@ export class GameScene extends Phaser.Scene {
     bridge.emit("paused", false);
 
     this.plots = [
-      { c: 2, r: 2, claimed: false },
-      { c: 10, r: 1, claimed: false },
-      { c: 12, r: 10, claimed: false },
+      { c: 14, r: 14, claimed: false },
+      { c: 26, r: 13, claimed: false },
+      { c: 27, r: 24, claimed: false },
+      { c: 13, r: 26, claimed: false },
+      { c: 20, r: 30, claimed: false },
     ];
     this.log("GENESIS PLOT ONLINE :: claim a house at the boot console", "sys");
   }
@@ -269,15 +294,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildGround() {
+    const CX = GRID / 2, CY = GRID / 2;
     for (let r = -1; r <= GRID; r++) {
       for (let c = -1; c <= GRID; c++) {
         const pos = cartToIso(c, r);
         const inGrid = c >= 0 && c < GRID && r >= 0 && r < GRID;
         const ring = !inGrid;
+        const dist = Math.sqrt((c - CX) * (c - CX) + (r - CY) * (r - CY));
         let tex = "grass";
         if (ring) tex = "void";
-        else if (r === 7 && c >= 4 && c <= 11) tex = "path";
-        else if (c === 7 && r >= 8 && r <= 12) tex = "path";
+        else if (dist > 16.5) tex = (c * 7 + r * 13) % 9 === 0 ? "grass3" : (c + r) % 2 === 0 ? "grass2" : "grass3"; // the Wilds
+        else if (r === 19 && c >= 9 && c <= 31) tex = "path";
+        else if (c === 19 && r >= 9 && r <= 31) tex = "path";
         else if ((c + r * 3) % 7 === 0) tex = "grass2";
         else if ((c * 5 + r) % 11 === 0) tex = "grass3";
         const img = this.add.image(pos.x, pos.y, tex).setDepth(r + c - 10);
@@ -287,7 +315,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildProps() {
-    const lampSpots = [[4, 6], [11, 6], [7, 9], [3, 12]];
+    const lampSpots = [[16, 18], [23, 18], [19, 21], [15, 24], [24, 24], [19, 16]];
     for (const [c, r] of lampSpots) {
       const p = cartToIso(c, r);
       const lamp = this.add.image(p.x, p.y - 4, "lamp").setOrigin(0.5, 1).setDepth(r + c + 0.5);
@@ -296,8 +324,16 @@ export class GameScene extends Phaser.Scene {
       this.markSolid(c, r);
       lamp.setData("solid", true);
     }
-    const treeSpots = [[0, 0], [15, 0], [0, 15], [15, 15], [1, 9], [14, 5], [6, 0], [9, 15]];
+    // trees: curated capital groves + procedural wilds scatter
+    const treeSpots: [number, number][] = [[12, 12], [27, 12], [12, 27], [27, 27], [13, 21], [26, 17], [18, 12], [21, 27]];
+    for (let r = 2; r < GRID - 2; r++) {
+      for (let c = 2; c < GRID - 2; c++) {
+        const dist = Math.sqrt((c - 20) * (c - 20) + (r - 20) * (r - 20));
+        if (dist > 11 && (c * 31 + r * 17) % 61 === 0) treeSpots.push([c, r]);
+      }
+    }
     for (const [c, r] of treeSpots) {
+      if (this.solids[r]?.[c]) continue;
       const p = cartToIso(c, r);
       const tree = this.add.image(p.x, p.y - 2, "holotree").setOrigin(0.5, 1).setDepth(r + c + 0.5);
       this.tweens.add({ targets: tree, alpha: { from: 1, to: 0.75 }, duration: 2200 + r * 137, yoyo: true, repeat: -1 });
@@ -331,23 +367,134 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildTerminal() {
-    const pos = cartToIso(7.5, 6);
+    const pos = cartToIso(19.5, 18);
     this.terminalPos = pos;
-    this.terminal = this.add.image(pos.x, pos.y - 4, "terminal").setOrigin(0.5, 1).setDepth(6 + 7.5 + 0.6);
-    this.terminalRing = this.add.image(pos.x, pos.y + 6, "selring").setDepth(6 + 7.5 + 0.2).setAlpha(0);
+    this.terminal = this.add.image(pos.x, pos.y - 4, "terminal").setOrigin(0.5, 1).setDepth(18 + 19.5 + 0.6);
+    this.terminalRing = this.add.image(pos.x, pos.y + 6, "selring").setDepth(18 + 19.5 + 0.2).setAlpha(0);
     this.tweens.add({ targets: this.terminalRing, alpha: { from: 0, to: 0.8 }, duration: 900, yoyo: true, repeat: -1 });
     const holo = this.add.text(pos.x, pos.y - 118, "◈ MARKET TERMINAL", {
       fontFamily: "Silkscreen", fontSize: "10px", color: "#3af5ff",
     }).setOrigin(0.5).setDepth(520).setAlpha(0.85);
     this.tweens.add({ targets: holo, y: pos.y - 124, duration: 1800, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    this.markSolid(7, 6); this.markSolid(8, 6);
+    this.markSolid(19, 18); this.markSolid(20, 18);
     // market building record (invulnerable, no yields)
     this.buildings.push({
-      id: this.nextId++, kind: "market", owner: "neutral", c: 7.5, r: 6, sx: pos.x, sy: pos.y,
+      id: this.nextId++, kind: "market", owner: "neutral", c: 19.5, r: 18, sx: pos.x, sy: pos.y,
       solidR: 34, hp: 99999, hpMax: 99999, invulnerable: true, sprite: this.terminal,
       bar: this.add.graphics().setDepth(998), barW: 0, barY: 0, atkTimer: 0,
       raidTimer: 0, raidIdx: 0, announced: false, destroyed: false, hpDirty: false,
     });
+  }
+
+  // ── resource nodes (the harvest) ─────────────────
+  private buildNodes() {
+    // ring of wealth around the capital — crystals pay Profit, blooms pay Love
+    const spots: { c: number; r: number; kind: "crystal" | "bloom" }[] = [
+      { c: 11, r: 19, kind: "crystal" }, { c: 28, r: 18, kind: "crystal" },
+      { c: 24, r: 29, kind: "crystal" }, { c: 14, r: 30, kind: "crystal" },
+      { c: 30, r: 24, kind: "crystal" }, { c: 9, r: 24, kind: "crystal" },
+      { c: 20, r: 9, kind: "crystal" }, { c: 32, r: 12, kind: "crystal" },
+      { c: 8, r: 12, kind: "crystal" },
+      { c: 16, r: 10, kind: "bloom" }, { c: 27, r: 21, kind: "bloom" },
+      { c: 17, r: 27, kind: "bloom" }, { c: 33, r: 28, kind: "bloom" },
+      { c: 6, r: 17, kind: "bloom" },
+    ];
+    for (const s of spots) {
+      const p = cartToIso(s.c, s.r);
+      const max = s.kind === "crystal" ? 700 : 400;
+      const sprite = this.add.image(p.x, p.y - 4, s.kind).setOrigin(0.5, 1).setDepth(s.r + s.c + 0.4);
+      const glow = this.add.image(p.x, p.y - 18, "glow")
+        .setDepth(s.r + s.c + 0.35).setTint(s.kind === "crystal" ? 0x3af5ff : 0xff5ad1)
+        .setBlendMode(Phaser.BlendModes.ADD).setScale(0.5).setAlpha(0.4);
+      this.tweens.add({ targets: glow, alpha: { from: 0.25, to: 0.55 }, duration: 1400 + s.c * 97, yoyo: true, repeat: -1 });
+      this.nodes.push({
+        id: this.nextId++, kind: s.kind, c: s.c, r: s.r, x: p.x, y: p.y,
+        amount: max, max, sprite, glow, dead: false,
+      });
+    }
+    this.log(`SURVEY COMPLETE :: ${this.nodes.length} resource nodes charted in the wilds`, "sys");
+  }
+
+  private depleteNode(n: ResNode) {
+    n.dead = true;
+    this.tweens.add({ targets: n.sprite, alpha: 0, y: n.sprite.y + 8, duration: 500, onComplete: () => n.sprite.destroy() });
+    this.tweens.add({ targets: n.glow, alpha: 0, duration: 400, onComplete: () => n.glow.destroy() });
+    this.log(`${n.kind === "crystal" ? "DATA CRYSTAL" : "HEART BLOOM"} DEPLETED :: the wilds give no more here`, "sys");
+  }
+
+  private updateGather(f: Fighter, dt: number) {
+    // retarget if the assigned node is gone
+    let node = this.nodes.find((n) => n.id === f.gatherId && !n.dead && n.amount > 0);
+    if (!node) {
+      let best: ResNode | null = null, bd = 1e9;
+      for (const n of this.nodes) {
+        if (n.dead || n.amount <= 0) continue;
+        const d = Phaser.Math.Distance.Between(f.x, f.y, n.x, n.y);
+        if (d < bd) { bd = d; best = n; }
+      }
+      if (best && bd < 800) { f.gatherId = best.id; node = best; }
+      else { f.gatherId = null; f.gState = "idle"; return; }
+    }
+    const drop = this.terminalPos;
+    if (f.cargo >= 10) f.gState = "toDrop";
+    else if (f.gState === "toDrop" || f.gState === "idle") f.gState = "toNode";
+
+    if (f.gState === "toNode") {
+      this.steer(f, node.x, node.y + 12, dt, 1);
+      if (Phaser.Math.Distance.Between(f.x, f.y, node.x, node.y + 12) < 22) { f.gState = "mine"; f.mineT = 0.4; }
+    } else if (f.gState === "mine") {
+      if (node.amount <= 0) { f.gState = "toNode"; return; }
+      f.mineT -= dt;
+      if (f.mineT <= 0) {
+        f.mineT = 1.4;
+        const take = Math.min(10, node.amount);
+        node.amount -= take;
+        f.cargo += take;
+        f.cargoKind = node.kind === "crystal" ? "p" : "l";
+        f.sprite.setTint(node.kind === "crystal" ? 0x3af5ff : 0xff5ad1);
+        node.sprite.setScale(0.55 + 0.45 * (node.amount / node.max));
+        if (node.amount <= 0) this.depleteNode(node);
+      }
+    } else if (f.gState === "toDrop") {
+      this.steer(f, drop.x, drop.y + 20, dt, 1);
+      if (Phaser.Math.Distance.Between(f.x, f.y, drop.x, drop.y + 20) < 34) {
+        if (f.cargoKind === "p") this.plt.p += f.cargo;
+        else this.plt.l += f.cargo;
+        this.floatText(f.x, f.y - 44, `+${f.cargo}${f.cargoKind === "p" ? "P" : "L"}`, f.cargoKind === "p" ? "#3af5ff" : "#ff5ad1");
+        this.activity("gather");
+        sfx.coin();
+        f.cargo = 0;
+        f.sprite.clearTint();
+        f.gState = "toNode";
+      }
+    }
+  }
+
+  private rallyAll() {
+    const cits = this.buildings.filter((b) => b.kind === "citadel" && !b.destroyed);
+    if (!cits.length) { this.log("ALL CITADELS ALREADY PURGED :: the wilds are yours", "good"); return; }
+    const center = cartToIso(20, 20);
+    let target = cits[0], bd = 1e9;
+    for (const b of cits) {
+      const d = Phaser.Math.Distance.Between(center.x, center.y, b.sx, b.sy);
+      if (d < bd) { bd = d; target = b; }
+    }
+    let sent = 0;
+    for (const f of this.units) {
+      if (f.dead || f.worker) continue;
+      f.order = {
+        type: "attackmove",
+        x: target.sx + Phaser.Math.Between(-60, 60),
+        y: target.sy + Phaser.Math.Between(-30, 50),
+      };
+      f.targetF = null; f.targetB = null;
+      sent++;
+    }
+    if (!this.avatar.dead) { this.avatar.order = { type: "attackmove", x: target.sx, y: target.sy + 40 }; }
+    sfx.horn();
+    bridge.emit("flash", { color: "rgba(58,245,255,0.16)" });
+    this.log(`WAR HORN :: ${sent} unit${sent === 1 ? "" : "s"} converging on the nearest Void Citadel`, "sys");
+    this.activity("cast");
   }
 
   private buildCitadels() {
@@ -369,7 +516,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildPlayer() {
-    const p = cartToIso(7.5, 10);
+    const p = cartToIso(19.5, 22);
     this.player = this.add.image(p.x, p.y, "player").setOrigin(0.5, 1).setDepth(20);
     const glow = this.add.image(p.x, p.y - 24, "glow").setTint(0x3af5ff).setBlendMode(Phaser.BlendModes.ADD).setScale(0.55).setAlpha(0.5).setDepth(19.9);
     this.player.setData("glow", glow);
@@ -384,8 +531,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildNpc() {
-    const center = cartToIso(12, 11);
-    const pos = cartToIso(12, 12.6);
+    const center = cartToIso(24, 23);
+    const pos = cartToIso(24, 24.6);
     this.npcTarget = { x: pos.x, y: pos.y - 8 };
     this.npc = this.add.image(pos.x, pos.y - 8, "watcher").setOrigin(0.5, 1).setDepth(25);
     this.npcGlow = this.add.image(pos.x, pos.y - 16, "glow").setDepth(24.9).setTint(0xff5ad1).setBlendMode(Phaser.BlendModes.ADD).setScale(0.6).setAlpha(0.4);
@@ -730,6 +877,11 @@ export class GameScene extends Phaser.Scene {
       speed: def.speed, radius: def.radius, loot: 0, ranged: def.ranged, tex: id,
       barY: ENEMY_BARY[id] ?? 48,
     });
+    f.worker = !!def.worker;
+    if (f.worker && !this.gleanerHinted) {
+      this.gleanerHinted = true;
+      this.log("GLEANER ONLINE :: right-click a Data Crystal or Heart Bloom to send it harvesting", "good");
+    }
     f.sprite.setScale(0.2).setAlpha(0);
     this.tweens.add({ targets: f.sprite, scale: 1, alpha: 1, duration: 350, ease: "Back.easeOut" });
     this.units.push(f);
@@ -920,6 +1072,7 @@ export class GameScene extends Phaser.Scene {
       ranged: cfg.ranged, sprite, bar: this.add.graphics().setDepth(998), barY: cfg.barY,
       ring: null, order: null, targetF: null, targetB: null,
       frozen: 0, invuln: 0, slow: 0, marked: 0, flash: 0, bobSeed: Math.random() * 100, dead: false, hpDirty: true,
+      worker: false, cargo: 0, cargoKind: "p", gatherId: null, gState: "idle", mineT: 0,
     };
   }
 
