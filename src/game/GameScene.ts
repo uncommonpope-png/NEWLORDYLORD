@@ -572,7 +572,9 @@ export class GameScene extends Phaser.Scene {
       E: kb.addKey("E"), M: kb.addKey("M"), ESC: kb.addKey("ESC"),
       Q: kb.addKey("Q"), X: kb.addKey("X"), F: kb.addKey("F"), T: kb.addKey("T"),
       ONE: kb.addKey("ONE"), TWO: kb.addKey("TWO"), THREE: kb.addKey("THREE"), FOUR: kb.addKey("FOUR"),
-      FIVE: kb.addKey("FIVE"), SIX: kb.addKey("SIX"), SEVEN: kb.addKey("SEVEN"),
+      FIVE: kb.addKey("FIVE"), SIX: kb.addKey("SIX"), SEVEN: kb.addKey("SEVEN"), EIGHT: kb.addKey("EIGHT"),
+      NINE: kb.addKey("NINE"), ZERO: kb.addKey("ZERO"),
+      R: kb.addKey("R"),
     };
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
@@ -645,6 +647,7 @@ export class GameScene extends Phaser.Scene {
       bridge.onCommand("prod", (d) => this.queueUnit(d.unit)),
       bridge.onCommand("arm", (d) => this.armWeapon(d.id)),
       bridge.onCommand("buildTurret", () => this.buildTurret()),
+      bridge.onCommand("rallyAll", () => this.rallyAll()),
       bridge.onCommand("pause", () => this.setPaused(true)),
       bridge.onCommand("resume", () => this.setPaused(false)),
       bridge.onCommand("sandbox", () => {
@@ -793,6 +796,37 @@ export class GameScene extends Phaser.Scene {
     if (this.armed) { this.armWeapon(null); return; }
     const w = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
     const sel = this.units.filter((f) => this.selected.has(f.id) && !f.dead);
+
+    // resource node under cursor? → send gleaners to harvest
+    let node: ResNode | null = null, nd = 40;
+    for (const n of this.nodes) {
+      if (n.dead || n.amount <= 0) continue;
+      const d = Phaser.Math.Distance.Between(w.x, w.y, n.x, n.y - 14);
+      if (d < nd) { nd = d; node = n; }
+    }
+    if (node) {
+      let gleaners = sel.filter((f) => f.worker);
+      if (!gleaners.length) {
+        // auto-assign the nearest idle gleaner
+        let best: Fighter | null = null, bd = 1e9;
+        for (const f of this.units) {
+          if (f.dead || !f.worker) continue;
+          const d = Phaser.Math.Distance.Between(f.x, f.y, node.x, node.y);
+          if (d < bd) { bd = d; best = f; }
+        }
+        if (best) gleaners = [best];
+      }
+      if (gleaners.length) {
+        for (const f of gleaners) { f.gatherId = node.id; f.gState = "toNode"; f.order = null; f.targetF = null; f.targetB = null; }
+        this.floatText(node.x, node.y - 40, "HARVEST", "#6bff9e");
+        sfx.blip();
+        if (!this.gleanerHinted) this.log("GLEANERS DISPATCHED :: they haul resources back to the Market Terminal", "good");
+        this.gleanerHinted = true;
+      } else {
+        this.log("NO GLEANERS :: forge one in the hotbar [8] to harvest resources", "sys");
+      }
+      return;
+    }
 
     // enemy fighter under cursor?
     let enemy: Fighter | null = null, ed = 36;
@@ -1624,9 +1658,10 @@ export class GameScene extends Phaser.Scene {
       }
     };
 
-    // player units
+    // player units — gleaners harvest instead of fight
     for (const f of allF) {
       if (f.kind === "avatar") continue;
+      if (f.worker) { this.updateGather(f, dt); continue; }
       processFighter(f, allE, [], 165);
     }
     // avatar combat — movement is owned by updatePlayer, so combat may not steer it
@@ -1896,9 +1931,13 @@ export class GameScene extends Phaser.Scene {
       if (kb.JustDown(this.keys.TWO)) this.armWeapon("arrow");
       if (kb.JustDown(this.keys.THREE)) this.armWeapon("shield");
       if (kb.JustDown(this.keys.FOUR)) this.armWeapon("cannon");
+      if (kb.JustDown(this.keys.NINE)) this.armWeapon("lantern");
+      if (kb.JustDown(this.keys.ZERO)) this.armWeapon("drum");
       if (kb.JustDown(this.keys.FIVE)) this.queueUnit("knight");
       if (kb.JustDown(this.keys.SIX)) this.queueUnit("lancer");
       if (kb.JustDown(this.keys.SEVEN)) this.queueUnit("golem");
+      if (kb.JustDown(this.keys.EIGHT)) this.queueUnit("gleaner");
+      if (kb.JustDown(this.keys.R)) this.rallyAll();
       if (kb.JustDown(this.keys.T)) this.buildTurret();
       if (kb.JustDown(this.keys.Q)) { this.attackMoveMode = true; this.log("ATTACK-MOVE :: next right-click sweeps the field", "sys"); }
       if (kb.JustDown(this.keys.X)) {
@@ -1995,6 +2034,11 @@ export class GameScene extends Phaser.Scene {
         ...this.enemies.filter((f) => !f.dead).slice(0, 24).map((f) => ({ x: f.x, y: f.y, t: "enemy" as const })),
       ],
       drumActive: this.time.now < this.drumUntil,
+      workers: this.units.filter((f) => !f.dead && f.worker).length,
+      nodesLeft: this.nodes.filter((n) => !n.dead && n.amount > 0).length,
+      nodesMini: this.nodes.filter((n) => !n.dead && n.amount > 0).map((n) => ({ x: n.x, y: n.y, kind: n.kind })),
+      citadelsDown: this.buildings.filter((b) => b.kind === "citadel" && b.destroyed).length,
+      citadelsTotal: this.buildings.filter((b) => b.kind === "citadel").length,
     };
     bridge.emit("plt", snap);
   }

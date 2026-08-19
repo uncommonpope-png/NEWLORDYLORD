@@ -93,7 +93,9 @@ const BOOT_LINES = [
   "> soul weapons charged :: BLADE / ARROW / SHIELD / CANNON",
   "> PLT ledger synchronized [PROFIT·LOVE·TAX]",
   "> decree 12 :: deposits split 60/20/20 — wallet / GSK treasury / entropy burn",
-  "> genesis plot 16×16 armed — awaiting commander…",
+  "> open world 40×40 charted :: 6 void citadels · 14 resource nodes",
+  "> gleaner protocol loaded :: harvest crystals & blooms for PLT",
+  "> awaiting commander…",
 ];
 
 export function BootScreen({ onStart }: { onStart: () => void }) {
@@ -109,10 +111,11 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
         <div>
           <div className="font-mono text-[11px] text-[#ff3ec8] tracking-[0.3em] mb-3">PROJECT // 2D SPATIAL OPERATING SYSTEM + WAR PROTOCOL</div>
           <h1 className="font-display text-[78px] leading-[0.95] text-[#eaffff] title-glow">SOUL<br />FEILD</h1>
-          <p className="font-body text-[15px] text-[#9fb4dd] mt-4 max-w-[440px] leading-relaxed">
-            The map is a filesystem. The units are agents. The fog is untested code — and beyond the barrier,
-            <span className="text-[#ff4d5e]"> three Void Citadels are compiling bugs against you</span>. Build the economy,
-            raise an army of <span className="text-[#3af5ff]">Compiler Knights</span> and <span className="text-[#ff3ec8]">Hex Lancers</span>, and purge the source.
+          <p className="font-body text-[15px] text-[#9fb4dd] mt-4 max-w-[460px] leading-relaxed">
+            The map is a filesystem — now an <span className="text-[#3af5ff]">open 40×40 world</span>. The units are agents. The fog is untested code —
+            and scattered across the wilds, <span className="text-[#ff4d5e]"> six Void Citadels are compiling bugs against you</span>. Harvest
+            <span className="text-[#6bff9e]"> Data Crystals</span> and <span className="text-[#ff5ad1]">Heart Blooms</span> with Gleaners, build the
+            economy, raise an army, and purge the source.
           </p>
           <div className="mt-6 holo-panel p-4 font-mono text-[11px] leading-[1.75] text-[#7ee7f5] min-h-[210px]">
             {BOOT_LINES.slice(0, lines).map((l, i) => <div key={i}>{l}</div>)}
@@ -130,11 +133,13 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
             <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 font-body text-[12.5px] text-[#cfe3ff] items-center">
               <CtrlRow keys={["W", "A", "S", "D"]} desc="isometric movement" />
               <CtrlRow keys={["L-DRAG"]} desc="select units (click or box)" />
-              <CtrlRow keys={["R-CLICK"]} desc="move / attack bugs / siege citadels" />
-              <CtrlRow keys={["1", "2", "3", "4"]} desc="arm Soul Weapons" />
-              <CtrlRow keys={["5", "6", "7"]} desc="forge Knight / Lancer / Golem" />
+              <CtrlRow keys={["R-CLICK"]} desc="move / attack / send gleaners to a node" />
+              <CtrlRow keys={["1-4", "9", "0"]} desc="arm Soul Weapons (9 Lantern · 0 Drum)" />
+              <CtrlRow keys={["5", "6", "7", "8"]} desc="forge Knight / Lancer / Golem / Gleaner" />
               <CtrlRow keys={["T"]} desc="build defense turret" />
+              <CtrlRow keys={["R"]} desc="rally ALL armies on the nearest citadel" />
               <CtrlRow keys={["Q", "X", "F"]} desc="attack-move / stop / follow" />
+              <CtrlRow keys={["V", "`"]} desc="3D command center / GSK shell" />
               <CtrlRow keys={["E"]} desc="market terminal / A2A handshake" />
               <CtrlRow keys={["ESC", "SCROLL", "M"]} desc="pause / zoom / mute" />
             </div>
@@ -142,7 +147,7 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
           <div className="holo-panel p-4">
             <div className="font-display text-[11px] text-[#ff3ec8] mb-2">VICTORY CONDITIONS</div>
             <ul className="font-mono text-[10.5px] text-[#8fa5d8] space-y-1.5 leading-snug">
-              <li><span className="text-[#3af5ff]">WAR ::</span> destroy all 3 Void Citadels beyond the barrier</li>
+              <li><span className="text-[#3af5ff]">WAR ::</span> destroy all 6 Void Citadels across the open world</li>
               <li><span className="text-[#ffc24d]">GENESIS ::</span> own {OBJECTIVE.housesNeeded} houses + {fmt(OBJECTIVE.netWorthNeeded)} PLT net worth</li>
               <li><span className="text-[#ff4d5e]">DEFEAT ::</span> base integrity hits zero (audits + raids)</li>
             </ul>
@@ -465,8 +470,8 @@ export function EndScreen({ stats, onReboot, onSandbox }: { stats: EndStats; onR
         <p className="font-body text-[13px] text-[#9fb4dd] mt-3">
           {win
             ? stats.warVictory
-              ? "All three citadels are smoking craters. The bug compilations halt, the barrier hums quiet, and the ledger bows to you."
-              : "The Genesis Plot thrives. Three structures hum on the grid and the ledger is sovereign — though the citadels still watch."
+              ? "All six Void Citadels are smoking craters. The wilds fall silent, the harvest flows unimpeded, and the ledger bows to you."
+              : "Your district thrives. Three structures hum on the grid and the ledger is sovereign — though six citadels still watch from the wilds."
             : "The Sentinel's audits and the Void's raids outpaced your reserves. The barrier dims, the ledger closes — but the kernel remembers."}
         </p>
         <div className="grid grid-cols-2 gap-x-8 gap-y-2 mt-7 text-left font-mono text-[11px]">

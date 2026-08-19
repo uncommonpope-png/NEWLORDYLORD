@@ -126,8 +126,8 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
   arrow: { id: "arrow", name: "The Arrow", cost: { p: 40, l: 0, t: 0 }, cd: 6, key: "2", targeting: true, color: "#ff3ec8", desc: "Surgical strike from the orbital layer on a single bug." },
   shield: { id: "shield", name: "The Shield", cost: { p: 0, l: 80, t: 0 }, cd: 20, key: "3", targeting: false, color: "#6bff9e", desc: "Freeze all bugs in time for 4s and mend every unit." },
   cannon: { id: "cannon", name: "The Cannon", cost: { p: 100, l: 0, t: 0 }, cd: 18, key: "4", targeting: true, color: "#ffc24d", desc: "Orbital slam on an area. Loud. Effective." },
-  lantern: { id: "lantern", name: "The Lantern", cost: { p: 0, l: 50, t: 0 }, cd: 20, key: "5", targeting: false, color: "#ffd977", desc: "Illuminates dead code: 30 dmg to every bug, marks them (+25% dmg taken) and slows them for 6s." },
-  drum: { id: "drum", name: "The Drum", cost: { p: 0, l: 75, t: 0 }, cd: 30, key: "6", targeting: false, color: "#ff8b3e", desc: "Synchronizes the collective: all agents move and strike 30% faster for 10s." },
+  lantern: { id: "lantern", name: "The Lantern", cost: { p: 0, l: 50, t: 0 }, cd: 20, key: "9", targeting: false, color: "#ffd977", desc: "Illuminates dead code: 30 dmg to every bug, marks them (+25% dmg taken) and slows them for 6s." },
+  drum: { id: "drum", name: "The Drum", cost: { p: 0, l: 75, t: 0 }, cd: 30, key: "0", targeting: false, color: "#ff8b3e", desc: "Synchronizes the collective: all agents move and strike 30% faster for 10s." },
 };
 
 export const TURRET_COST = { p: 120, l: 0, t: 40 };

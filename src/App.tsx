@@ -189,6 +189,7 @@ export default function App() {
           />
           <PromptBar prompt={prompt} />
           <WaveBanner wave={wave} />
+          <Minimap snap={snap} />
         </>
       )}
 
@@ -199,7 +200,7 @@ export default function App() {
 
       {/* view chip */}
       {screen === "game" && view === "arena" && !ended && (
-        <div className="absolute bottom-4 right-4 z-10 flex gap-2">
+        <div className="absolute top-3 right-4 z-10 flex gap-2" style={{ marginTop: 100 }}>
           <button
             onClick={() => { setView("command"); sfx.blip(); }}
             className="font-mono text-[9px] px-2 py-1 border border-[#1c2c52] text-[#6f86b8] hover:text-[#ff3ec8] hover:border-[#ff3ec855] transition-colors cursor-pointer bg-[rgba(6,10,24,0.7)]"

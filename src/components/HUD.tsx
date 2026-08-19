@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
-import { PltSnapshot, RESOURCE_META, fmt, HOUSE_DEFS, OBJECTIVE, WEAPON_DEFS, UNIT_DEFS, TURRET_COST, TURRET_MAX, WeaponId, UnitId } from "../game/bridge";
+import { bridge, PltSnapshot, RESOURCE_META, fmt, HOUSE_DEFS, OBJECTIVE, WEAPON_DEFS, UNIT_DEFS, TURRET_COST, TURRET_MAX, WeaponId, UnitId } from "../game/bridge";
 
 export type LogEntry = { msg: string; tone: "good" | "bad" | "sys" };
 
@@ -62,9 +62,9 @@ const WEAPON_ICONS: Record<WeaponId, (p: { s?: number }) => ReactElement> = {
 };
 
 // ── minimap (phase 8) ────────────────────────────────────────────────
-const MM_W = 176, MM_H = 104;
-const mmx = (x: number) => ((x + 560) / 1120) * MM_W;
-const mmy = (y: number) => ((y + 90) / 660) * MM_H;
+const MM_W = 176, MM_H = 120;
+const mmx = (x: number) => ((x + 1500) / 3000) * MM_W;
+const mmy = (y: number) => ((y + 160) / 1560) * MM_H;
 
 export function Minimap({ snap }: { snap: PltSnapshot }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -74,20 +74,27 @@ export function Minimap({ snap }: { snap: PltSnapshot }) {
     const ctx = cv.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, MM_W, MM_H);
-    ctx.fillStyle = "rgba(4,6,15,0.82)";
+    ctx.fillStyle = "rgba(4,6,15,0.85)";
     ctx.fillRect(0, 0, MM_W, MM_H);
-    // safe-zone diamond
+    // capital district (inner 16×16 of the 40×40 world)
     ctx.beginPath();
-    ctx.moveTo(mmx(0), mmy(0));
-    ctx.lineTo(mmx(480), mmy(240));
-    ctx.lineTo(mmx(0), mmy(480));
-    ctx.lineTo(mmx(-480), mmy(240));
+    ctx.moveTo(mmx(0), mmy(384));
+    ctx.lineTo(mmx(512), mmy(640));
+    ctx.lineTo(mmx(0), mmy(896));
+    ctx.lineTo(mmx(-512), mmy(640));
     ctx.closePath();
-    ctx.fillStyle = "rgba(34,60,40,0.55)";
+    ctx.fillStyle = "rgba(34,60,40,0.5)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(58,245,255,0.55)";
+    ctx.strokeStyle = "rgba(58,245,255,0.4)";
     ctx.lineWidth = 1;
     ctx.stroke();
+    // resource nodes
+    for (const n of snap.nodesMini) {
+      ctx.fillStyle = n.kind === "crystal" ? "#3af5ff" : "#ff5ad1";
+      ctx.beginPath();
+      ctx.arc(mmx(n.x), mmy(n.y), 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
     // structures
     for (const b of snap.buildings3d) {
       ctx.fillStyle = b.color;
@@ -95,7 +102,7 @@ export function Minimap({ snap }: { snap: PltSnapshot }) {
         ctx.save();
         ctx.translate(mmx(b.x), mmy(b.y));
         ctx.rotate(Math.PI / 4);
-        ctx.fillRect(-3.5, -3.5, 7, 7);
+        ctx.fillRect(-4, -4, 8, 8);
         ctx.restore();
       } else {
         ctx.fillRect(mmx(b.x) - 2, mmy(b.y) - 2, 4, 4);
@@ -111,7 +118,7 @@ export function Minimap({ snap }: { snap: PltSnapshot }) {
     <div className="absolute bottom-3 right-3 z-10 pointer-events-none">
       <div className="holo-panel-sm p-1.5">
         <canvas ref={ref} width={MM_W} height={MM_H} className="block" />
-        <div className="font-mono text-[8px] text-[#42557f] tracking-[0.25em] text-center mt-1">GENESIS GRID · 16×16</div>
+        <div className="font-mono text-[8px] text-[#42557f] tracking-[0.25em] text-center mt-1">OPEN WORLD · 40×40</div>
       </div>
     </div>
   );
@@ -209,7 +216,19 @@ export function WarPanel({ snap }: { snap: PltSnapshot }) {
         <span className="text-[#6f86b8]">THREATS</span><span className="text-right" style={{ color: snap.threats > 0 ? "#ff4d5e" : "#6bff9e" }}>{snap.threats}</span>
         <span className="text-[#6f86b8]">KILLS</span><span className="text-[#eaffff] text-right">{snap.kills}</span>
         <span className="text-[#6f86b8]">TURRETS</span><span className="text-[#eaffff] text-right">{snap.turretCount}/{TURRET_MAX}</span>
+        <span className="text-[#6f86b8]">GLEANERS</span><span className="text-[#6bff9e] text-right">{snap.workers}</span>
+        <span className="text-[#6f86b8]">NODES</span><span className="text-[#eaffff] text-right">{snap.nodesLeft}</span>
+        <span className="text-[#6f86b8]">CITADELS</span>
+        <span className="text-right" style={{ color: snap.citadelsDown > 0 ? "#6bff9e" : "#eaffff" }}>
+          {snap.citadelsDown}/{snap.citadelsTotal} DOWN
+        </span>
       </div>
+      <button
+        onClick={() => bridge.command("rallyAll", {})}
+        className="btn-holo btn-magenta w-full py-1.5 text-[10px] mt-2 pointer-events-auto"
+      >
+        ⚔ SEND ALL ARMIES [R]
+      </button>
       <div className="mt-2 pt-2 border-t border-[#1c2c52]">
         <div className="font-mono text-[9px] text-[#6f86b8] mb-1">CITADELS</div>
         <div className="space-y-1">
