@@ -120,6 +120,7 @@ class SoulAudio {
   cannonIn() { this.tone("sine", 1600, 300, 0.5, 0.14, 0, "lin"); }
   lantern() { [880, 1175, 1568, 2093].forEach((f, i) => this.tone("sine", f, f * 1.03, 0.34, 0.07, i * 0.055)); this.noise(0.3, 0.03, 8000, 0.5); }
   drum() { for (let i = 0; i < 4; i++) { this.tone("sine", 150, 52, 0.22, 0.2, i * 0.18); this.noise(0.05, 0.08, 900, i * 0.18); } }
+  unlock() { [523, 659, 784, 1047].forEach((f, i) => this.tone("triangle", f, f * 1.01, 0.16, 0.13, i * 0.06)); }
 }
 
 export const sfx = new SoulAudio();

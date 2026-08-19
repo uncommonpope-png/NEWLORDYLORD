@@ -8,7 +8,7 @@ import Phaser from "phaser";
 // ── world constants ──────────────────────────────────────────────────
 export const TILE_W = 64;
 export const TILE_H = 32;
-export const GRID = 40;
+export const GRID = 56;
 
 export const cartToIso = (col: number, row: number) => ({
   x: (col - row) * (TILE_W / 2),
@@ -63,8 +63,14 @@ export const HOUSE_DEFS: Record<HouseId, HouseDef> = {
   },
 };
 
-// ── army :: production units ─────────────────────────────────────────
-export type UnitId = "knight" | "lancer" | "golem" | "gleaner";
+// ── army :: production units (warcraft-grade roster) ─────────────────
+export type UnitId =
+  | "imp" | "knight" | "scout"
+  | "lancer" | "bomber" | "golem"
+  | "guardian" | "priest" | "titan"
+  | "gleaner";
+
+export type StructId = "supply" | "barracks" | "foundry" | "heavy" | "sanctum" | "turret";
 
 export interface UnitDef {
   id: UnitId;
@@ -82,30 +88,110 @@ export interface UnitDef {
   color: string;
   ranged: boolean;
   worker?: boolean;
+  requires: StructId | null;
+  splash?: number;
+  siegeBonus?: number;
+  healer?: boolean;
 }
 
+export const UNIT_ORDER: UnitId[] = ["imp", "knight", "scout", "lancer", "bomber", "golem", "guardian", "priest", "titan", "gleaner"];
+
 export const UNIT_DEFS: Record<UnitId, UnitDef> = {
+  imp: {
+    id: "imp", name: "Script Imp", hp: 24, dmg: 4, range: 30, atkCd: 0.55,
+    speed: 124, radius: 8, supply: 1, cost: { p: 40, l: 0, t: 0 }, key: "",
+    desc: "Disposable swarm script. Cheap, fast, angry.", color: "#ff6b5e", ranged: false, requires: "barracks",
+  },
   knight: {
     id: "knight", name: "Compiler Knight", hp: 70, dmg: 9, range: 42, atkCd: 0.65,
     speed: 94, radius: 12, supply: 1, cost: { p: 80, l: 0, t: 0 }, key: "5",
-    desc: "Melee frontline. Refactors bugs on contact.", color: "#3af5ff", ranged: false,
+    desc: "Melee frontline. Refactors bugs on contact.", color: "#3af5ff", ranged: false, requires: "barracks",
+  },
+  scout: {
+    id: "scout", name: "Async Scout", hp: 32, dmg: 4, range: 32, atkCd: 0.7,
+    speed: 168, radius: 9, supply: 1, cost: { p: 60, l: 10, t: 0 }, key: "",
+    desc: "Blistering recon. Charts the wilds, pokes the Void.", color: "#9fdcff", ranged: false, requires: "barracks",
   },
   lancer: {
     id: "lancer", name: "Hex Lancer", hp: 45, dmg: 12, range: 175, atkCd: 1.1,
     speed: 86, radius: 11, supply: 1, cost: { p: 100, l: 20, t: 0 }, key: "6",
-    desc: "Ranged debugger. Fires hex bolts from afar.", color: "#ff3ec8", ranged: true,
+    desc: "Ranged debugger. Fires hex bolts from afar.", color: "#ff3ec8", ranged: true, requires: "foundry",
+  },
+  bomber: {
+    id: "bomber", name: "Fork Bomber", hp: 36, dmg: 18, range: 150, atkCd: 1.6,
+    speed: 84, radius: 10, supply: 1, cost: { p: 120, l: 0, t: 30 }, key: "",
+    desc: "Lobs forking payloads. Splash damage on impact.", color: "#ff8b3e", ranged: true, requires: "foundry", splash: 58,
   },
   golem: {
     id: "golem", name: "Refactor Golem", hp: 210, dmg: 16, range: 46, atkCd: 1.25,
     speed: 62, radius: 16, supply: 2, cost: { p: 150, l: 0, t: 40 }, key: "7",
-    desc: "Heavy tank. Absorbs entropy so others don't have to.", color: "#ffc24d", ranged: false,
+    desc: "Siege engine. ×3 damage vs structures.", color: "#ffc24d", ranged: false, requires: "heavy", siegeBonus: 3,
+  },
+  guardian: {
+    id: "guardian", name: "Mutex Guardian", hp: 280, dmg: 13, range: 42, atkCd: 1.0,
+    speed: 58, radius: 15, supply: 2, cost: { p: 180, l: 0, t: 60 }, key: "",
+    desc: "Locks the line. A wall of synchronized steel.", color: "#5ea8ff", ranged: false, requires: "heavy",
+  },
+  priest: {
+    id: "priest", name: "Patch Priest", hp: 42, dmg: 0, range: 140, atkCd: 1.0,
+    speed: 88, radius: 10, supply: 1, cost: { p: 150, l: 60, t: 0 }, key: "",
+    desc: "Hotfixes wounded allies in range. Does not attack.", color: "#f5f0ff", ranged: true, requires: "sanctum", healer: true,
+  },
+  titan: {
+    id: "titan", name: "Kernel Titan", hp: 650, dmg: 34, range: 55, atkCd: 1.5,
+    speed: 44, radius: 19, supply: 4, cost: { p: 400, l: 100, t: 80 }, key: "",
+    desc: "The monolith walks. Slow, furious, nearly eternal.", color: "#ffd977", ranged: false, requires: "sanctum",
   },
   gleaner: {
     id: "gleaner", name: "Gleaner Drone", hp: 34, dmg: 0, range: 0, atkCd: 99,
     speed: 118, radius: 9, supply: 1, cost: { p: 60, l: 0, t: 0 }, key: "8",
-    desc: "Worker NPC. Send it to Data Crystals / Heart Blooms to harvest PLT.", color: "#6bff9e", ranged: false, worker: true,
+    desc: "Worker NPC. Send it to Data Crystals / Heart Blooms to harvest PLT.", color: "#6bff9e", ranged: false, worker: true, requires: null,
   },
 };
+
+// ── structures :: build anywhere ─────────────────────────────────────
+export interface StructDef {
+  id: StructId;
+  name: string;
+  cost: { p: number; l: number; t: number };
+  hp: number;
+  supply: number;
+  buildTime: number;
+  color: string;
+  desc: string;
+  unlocks: UnitId[];
+  footprint: number;
+}
+
+export const STRUCT_DEFS: Record<StructId, StructDef> = {
+  supply: {
+    id: "supply", name: "Supply Pylon", cost: { p: 80, l: 0, t: 10 }, hp: 260, supply: 4, buildTime: 8,
+    color: "#6bff9e", desc: "+4 supply cap. Feeds the war machine.", unlocks: [], footprint: 1,
+  },
+  barracks: {
+    id: "barracks", name: "Compile Barracks", cost: { p: 200, l: 0, t: 40 }, hp: 520, supply: 0, buildTime: 16,
+    color: "#3af5ff", desc: "Trains Script Imps, Compiler Knights, Async Scouts.", unlocks: ["imp", "knight", "scout"], footprint: 2,
+  },
+  foundry: {
+    id: "foundry", name: "Hex Foundry", cost: { p: 260, l: 40, t: 0 }, hp: 520, supply: 0, buildTime: 18,
+    color: "#ff3ec8", desc: "Forges Hex Lancers and Fork Bombers.", unlocks: ["lancer", "bomber"], footprint: 2,
+  },
+  heavy: {
+    id: "heavy", name: "Heavy Works", cost: { p: 340, l: 0, t: 80 }, hp: 640, supply: 0, buildTime: 22,
+    color: "#ffc24d", desc: "Assembles Mutex Guardians and Refactor Golems.", unlocks: ["guardian", "golem"], footprint: 2,
+  },
+  sanctum: {
+    id: "sanctum", name: "Soul Sanctum", cost: { p: 460, l: 140, t: 0 }, hp: 560, supply: 0, buildTime: 26,
+    color: "#f5f0ff", desc: "Summons Patch Priests and Kernel Titans.", unlocks: ["priest", "titan"], footprint: 2,
+  },
+  turret: {
+    id: "turret", name: "Defense Turret", cost: { p: 100, l: 0, t: 30 }, hp: 300, supply: 0, buildTime: 10,
+    color: "#9fdcff", desc: "Auto-fires on bugs in range. Max 6.", unlocks: [], footprint: 1,
+  },
+};
+
+export const SUPPLY_START = 10;
+export const SUPPLY_CAP = 80;
 
 // ── soul weapons ─────────────────────────────────────────────────────
 export type WeaponId = "blade" | "arrow" | "shield" | "cannon" | "lantern" | "drum";
@@ -173,7 +259,9 @@ export interface PltSnapshot {
   selected: { name: string; hp: number; hpMax: number; kind: string }[];
   selectedCount: number;
   // 3D command center feed
-  buildings3d: { kind: string; label: string; x: number; y: number; hp: number; hpMax: number; color: string }[];
+  buildings3d: { kind: string; label: string; x: number; y: number; hp: number; hpMax: number; color: string; done: boolean }[];
+  gameSpeed: number;
+  buildArmed: string | null;
   motes: { x: number; y: number; t: "unit" | "enemy" }[];
   drumActive: boolean;
   workers: number;
@@ -192,6 +280,9 @@ export type BridgeCommands = {
   arm: { id: WeaponId | null };
   buildTurret: {};
   rallyAll: {};
+  place: { id: StructId };
+  cancelPlace: {};
+  speed: {};
   resume: {};
   pause: {};
   reboot: {};

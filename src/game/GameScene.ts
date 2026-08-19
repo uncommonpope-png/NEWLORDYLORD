@@ -6,9 +6,10 @@
 import Phaser from "phaser";
 import {
   TILE_W, TILE_H, GRID, cartToIso, isoToCart,
-  HOUSE_DEFS, UNIT_DEFS, WEAPON_DEFS, TURRET_COST, TURRET_MAX,
+  HOUSE_DEFS, UNIT_DEFS, WEAPON_DEFS, TURRET_COST, TURRET_MAX, STRUCT_DEFS,
+  SUPPLY_START, SUPPLY_CAP,
   START_PLT, START_INTEGRITY, EXCHANGE, OBJECTIVE, fmt,
-  bridge, HouseId, UnitId, WeaponId, PltSnapshot, EndStats,
+  bridge, HouseId, UnitId, WeaponId, StructId, PltSnapshot, EndStats,
 } from "./bridge";
 import { createTextures } from "./textures";
 import { sfx } from "./audio";
@@ -85,7 +86,7 @@ interface ResNode {
 
 interface Building {
   id: number;
-  kind: "house" | "turret" | "citadel" | "market";
+  kind: "house" | "turret" | "citadel" | "market" | "supply" | "barracks" | "foundry" | "heavy" | "sanctum" | "relay";
   owner: "player" | "cpu" | "neutral";
   houseType?: HouseId;
   c: number; r: number;
@@ -102,6 +103,14 @@ interface Building {
   yields?: { p: number; l: number; t: number };
   destroyed: boolean;
   hpDirty: boolean;
+  // construction / unlock system
+  underConstruction?: boolean;
+  buildProgress?: number;       // 0..1
+  buildTime?: number;
+  scaffold?: Phaser.GameObjects.Image;
+  structId?: StructId;
+  supplyBonus?: number;
+  unlocked?: boolean;           // construction finished, outputs available
 }
 
 interface Projectile {
@@ -193,6 +202,12 @@ export class GameScene extends Phaser.Scene {
   private drumUntil = 0;
   private armed: WeaponId | null = null;
 
+  // build-anywhere placement system
+  private placeArmed: StructId | null = null;
+  private ghost: Phaser.GameObjects.Image | null = null;
+  private ghostValid = false;
+  private gameSpeed = 1;
+
   private unsub: (() => void)[] = [];
 
   constructor() { super("GameScene"); }
@@ -214,6 +229,7 @@ export class GameScene extends Phaser.Scene {
     this.depositsPlt = 0; this.playTime = 0; this.auditTimer = 45;
     this.paused = false; this.ended = false; this.sandbox = false; this.started = false;
     this.handshakeCd = 0; this.respawnTimer = -1; this.npcBubble = null;
+    this.placeArmed = null; this.ghost = null; this.ghostValid = false; this.gameSpeed = 1;
 
     this.buildVoid();
     this.buildGround();
@@ -578,6 +594,12 @@ export class GameScene extends Phaser.Scene {
     };
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
+      // build-anywhere placement takes priority
+      if (this.placeArmed) {
+        if (ptr.rightButtonDown()) { this.cancelPlace(); return; }
+        if (ptr.leftButtonDown()) { this.confirmPlace(); return; }
+        return;
+      }
       if (ptr.rightButtonDown()) { this.issueOrder(ptr); return; }
       if (ptr.leftButtonDown()) {
         if (this.armed === "blade") {
@@ -595,6 +617,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.input.on("pointermove", (ptr: Phaser.Input.Pointer) => {
+      this.updateGhost();
       if (this.dragStart && (Math.abs(ptr.x - this.dragStart.x) > 7 || Math.abs(ptr.y - this.dragStart.y) > 7)) {
         if (!this.dragBox) this.dragBox = this.add.graphics().setDepth(2000).setScrollFactor(0);
         this.dragBox.clear();
@@ -648,6 +671,9 @@ export class GameScene extends Phaser.Scene {
       bridge.onCommand("arm", (d) => this.armWeapon(d.id)),
       bridge.onCommand("buildTurret", () => this.buildTurret()),
       bridge.onCommand("rallyAll", () => this.rallyAll()),
+      bridge.onCommand("place", (d) => this.startPlace(d.id)),
+      bridge.onCommand("cancelPlace", () => this.cancelPlace()),
+      bridge.onCommand("speed", () => this.cycleSpeed()),
       bridge.onCommand("pause", () => this.setPaused(true)),
       bridge.onCommand("resume", () => this.setPaused(false)),
       bridge.onCommand("sandbox", () => {
@@ -870,25 +896,35 @@ export class GameScene extends Phaser.Scene {
   }
 
   // ═══════════════════════════ RTS :: PRODUCTION ═══════════════════════════
-  private supplyMax() { return Math.min(20, 4 + this.owned.length * 2); }
+  private supplyMax() {
+    const pylons = this.buildings.filter((b) => b.structId === "supply" && !b.destroyed && !b.underConstruction).length;
+    return Math.min(SUPPLY_CAP, SUPPLY_START + this.owned.length * 2 + pylons * 4);
+  }
   private supplyUsed() {
     let s = 0;
     for (const f of this.units) if (!f.dead) s += (UNIT_DEFS[f.kind as UnitId]?.supply) ?? 1;
     return s;
   }
 
+  private hasStruct(id: StructId): boolean {
+    return this.buildings.some((b) => b.structId === id && !b.destroyed && !b.underConstruction);
+  }
+
   private queueUnit(id: UnitId) {
     if (!this.started || this.paused || this.ended) return;
     const def = UNIT_DEFS[id];
+    if (def.requires && !this.hasStruct(def.requires)) {
+      this.log(`LOCKED :: ${def.name} requires a ${STRUCT_DEFS[def.requires].name}`, "bad"); sfx.error(); return;
+    }
     if (this.queue.length >= 5) { this.log("PRODUCTION QUEUE FULL :: max 5", "bad"); sfx.error(); return; }
     if (this.supplyUsed() + this.queue.reduce((s, q) => s + UNIT_DEFS[q.unit].supply, 0) + def.supply > this.supplyMax()) {
-      this.log("SUPPLY CAP REACHED :: claim more houses (+2 each)", "bad"); sfx.error(); return;
+      this.log("SUPPLY CAP REACHED :: build Supply Pylons or claim houses", "bad"); sfx.error(); return;
     }
     if (this.plt.p < def.cost.p || this.plt.l < def.cost.l || this.plt.t < def.cost.t) {
       this.log(`INSUFFICIENT PLT for ${def.name}`, "bad"); sfx.error(); return;
     }
     this.plt.p -= def.cost.p; this.plt.l -= def.cost.l; this.plt.t -= def.cost.t;
-    const total = id === "golem" ? 7 : id === "lancer" ? 5 : 4;
+    const total = id === "titan" ? 14 : id === "guardian" ? 9 : id === "golem" ? 8 : id === "priest" ? 7 : id === "bomber" ? 6 : id === "lancer" ? 5 : id === "scout" ? 3 : id === "imp" ? 2.5 : 4;
     this.queue.push({ unit: id, t: total, total });
     sfx.blip();
     this.log(`${def.name} queued :: ${total}s`, "sys");
@@ -966,6 +1002,116 @@ export class GameScene extends Phaser.Scene {
     this.burst(spot.x, spot.y - 20, 0x3af5ff, 12);
     sfx.build();
     this.log("DEFENSE TURRET online :: auto-fire enabled", "good");
+  }
+
+  // ═══════════════════════════ BUILD ANYWHERE ═══════════════════════════
+  private cycleSpeed() {
+    this.gameSpeed = this.gameSpeed === 1 ? 1.5 : this.gameSpeed === 1.5 ? 2 : 1;
+    this.log(`SIMULATION CLOCK :: ${this.gameSpeed}× speed`, "sys");
+    sfx.blip();
+  }
+
+  private startPlace(id: StructId) {
+    if (!this.started || this.paused || this.ended) return;
+    const def = STRUCT_DEFS[id];
+    if (id === "turret") {
+      const count = this.buildings.filter((b) => b.kind === "turret" && !b.destroyed).length;
+      if (count >= TURRET_MAX) { this.log("TURRET GRID SATURATED :: max 6", "bad"); sfx.error(); return; }
+    }
+    this.placeArmed = id;
+    if (!this.ghost) this.ghost = this.add.image(0, 0, `struct_${id}`).setOrigin(0.5, 1).setDepth(1500).setAlpha(0.65);
+    else this.ghost.setTexture(`struct_${id}`).setVisible(true);
+    this.log(`PLACEMENT :: ${def.name} — click open ground to build, right-click to cancel`, "sys");
+    sfx.blip();
+  }
+
+  private cancelPlace() {
+    this.placeArmed = null;
+    if (this.ghost) this.ghost.setVisible(false);
+  }
+
+  private updateGhost() {
+    if (!this.placeArmed || !this.ghost) return;
+    const w = this.cameras.main.getWorldPoint(this.input.activePointer.x, this.input.activePointer.y);
+    const cart = isoToCart(w.x, w.y);
+    const snap = cartToIso(Math.floor(cart.col) + 0.5, Math.floor(cart.row) + 0.5);
+    this.ghost.setPosition(snap.x, snap.y - 2);
+    this.ghostValid = this.canPlaceAt(Math.floor(cart.col), Math.floor(cart.row));
+    this.ghost.setTint(this.ghostValid ? 0x6bff9e : 0xff4d5e);
+  }
+
+  private canPlaceAt(c: number, r: number): boolean {
+    if (!this.placeArmed) return false;
+    const fp = STRUCT_DEFS[this.placeArmed].footprint;
+    for (let dr = 0; dr < fp; dr++) {
+      for (let dc = 0; dc < fp; dc++) {
+        const cc = c + dc, rr = r + dr;
+        if (cc < 0 || cc >= GRID || rr < 0 || rr >= GRID) return false;
+        if (this.solids[rr][cc]) return false;
+      }
+    }
+    const p = cartToIso(c + fp / 2, r + fp / 2);
+    for (const b of this.buildings) {
+      if (!b.destroyed && Phaser.Math.Distance.Between(p.x, p.y, b.sx, b.sy) < 64) return false;
+    }
+    for (const n of this.nodes) {
+      if (!n.dead && Phaser.Math.Distance.Between(p.x, p.y, n.x, n.y) < 40) return false;
+    }
+    return true;
+  }
+
+  private confirmPlace() {
+    if (!this.placeArmed) return;
+    const id = this.placeArmed;
+    const def = STRUCT_DEFS[id];
+    const w = this.cameras.main.getWorldPoint(this.input.activePointer.x, this.input.activePointer.y);
+    const cart = isoToCart(w.x, w.y);
+    const c = Math.floor(cart.col), r = Math.floor(cart.row);
+    if (!this.canPlaceAt(c, r)) { this.log("CANNOT BUILD THERE :: ground is blocked", "bad"); sfx.error(); return; }
+    if (this.plt.p < def.cost.p || this.plt.l < def.cost.l || this.plt.t < def.cost.t) {
+      this.log(`INSUFFICIENT PLT for ${def.name}`, "bad"); sfx.error(); return;
+    }
+    this.plt.p -= def.cost.p; this.plt.l -= def.cost.l; this.plt.t -= def.cost.t;
+    const fp = def.footprint;
+    const ground = cartToIso(c + fp / 2, r + fp / 2);
+    const sprite = this.add.image(ground.x, ground.y - 2, `struct_${id}`).setOrigin(0.5, 1).setDepth(r + c + 0.6).setAlpha(0.4);
+    const scaffold = this.add.image(ground.x, ground.y - 2, "scaffold").setOrigin(0.5, 1).setDepth(r + c + 0.7).setAlpha(0.8);
+    const b: Building = {
+      id: this.nextId++, kind: id === "turret" ? "turret" : id, owner: "player",
+      structId: id, c, r, sx: ground.x, sy: ground.y,
+      solidR: fp === 2 ? 40 : 22, hp: def.hp, hpMax: def.hp, sprite, scaffold,
+      bar: this.add.graphics().setDepth(998), barW: fp === 2 ? 70 : 44, barY: fp === 2 ? 110 : 76,
+      atkTimer: 0.5, raidTimer: 0, raidIdx: 0, announced: false, destroyed: false, hpDirty: false,
+      underConstruction: true, buildProgress: 0, buildTime: def.buildTime,
+      supplyBonus: def.supply, unlocked: false,
+    };
+    this.buildings.push(b);
+    for (let dr = 0; dr < fp; dr++) for (let dc = 0; dc < fp; dc++) this.markSolid(c + dc, r + dr);
+    this.burst(ground.x, ground.y - 20, Phaser.Display.Color.HexStringToColor(def.color).color, 12);
+    sfx.build();
+    this.log(`${def.name} under construction :: ${def.buildTime}s`, "sys");
+    this.cancelPlace();
+  }
+
+  private tickConstruction(dt: number) {
+    for (const b of this.buildings) {
+      if (b.destroyed || !b.underConstruction) continue;
+      b.buildProgress = (b.buildProgress ?? 0) + dt / (b.buildTime ?? 10);
+      b.sprite.setAlpha(0.4 + 0.6 * Math.min(1, b.buildProgress));
+      if (b.scaffold) b.scaffold.setAlpha(0.8 * (1 - Math.min(1, b.buildProgress)));
+      if (b.buildProgress >= 1) {
+        b.underConstruction = false;
+        b.unlocked = true;
+        b.sprite.setAlpha(1);
+        if (b.scaffold) { b.scaffold.destroy(); b.scaffold = undefined; }
+        const def = b.structId ? STRUCT_DEFS[b.structId] : null;
+        this.burst(b.sx, b.sy - 30, Phaser.Display.Color.HexStringToColor(def?.color ?? "#3af5ff").color, 16);
+        sfx.unlock();
+        this.log(`${def?.name ?? "STRUCTURE"} complete${def && def.unlocks.length ? ` :: unlocks ${def.unlocks.map((u) => UNIT_DEFS[u].name).join(", ")}` : ""}`, "good");
+        if (b.structId === "turret") this.log("DEFENSE TURRET online :: auto-fire enabled", "good");
+        if (b.structId === "supply") this.log("SUPPLY CAP increased :: +4", "good");
+      }
+    }
   }
 
   // ═══════════════════════════ SOUL WEAPONS ═══════════════════════════
@@ -1378,10 +1524,11 @@ export class GameScene extends Phaser.Scene {
 
   // ═══════════════════════════ UPDATE ═══════════════════════════
   update(_time: number, delta: number) {
-    const dt = Math.min(delta / 1000, 0.05);
-    this.updateAmbient(dt);
+    const rawDt = Math.min(delta / 1000, 0.05);
+    this.updateAmbient(rawDt);
     if (!this.started || this.ended) return;
     if (!this.paused) {
+      const dt = rawDt * this.gameSpeed;
       this.playTime += dt;
       this.updatePlayer(dt);
       this.updateOrdersAndCombat(dt);
@@ -1389,9 +1536,10 @@ export class GameScene extends Phaser.Scene {
       this.updateWeaponsAndBlasts(dt);
       this.updateCitadels(dt);
       this.updateEconomy(dt);
+      this.tickConstruction(dt);
     }
     this.updatePrompts();
-    this.updateCamera(dt);
+    this.updateCamera(rawDt);
     if (this.time.now % 2 < 1.2) this.pushSnapshot();
   }
 
@@ -2024,10 +2172,11 @@ export class GameScene extends Phaser.Scene {
       selectedCount: this.selected.size,
       buildings3d: this.buildings.filter((b) => !b.destroyed).map((b) => ({
         kind: b.kind,
-        label: b.kind === "house" && b.houseType ? HOUSE_DEFS[b.houseType].name : b.kind === "citadel" ? "VOID CITADEL" : b.kind === "turret" ? "DEFENSE TURRET" : "MARKET CORE",
+        label: this.structLabel(b),
         x: b.sx, y: b.sy,
         hp: Math.max(0, Math.round(b.hp)), hpMax: b.hpMax,
-        color: b.kind === "house" && b.houseType ? HOUSE_DEFS[b.houseType].colors.primary : b.kind === "citadel" ? "#ff4d5e" : b.kind === "turret" ? "#3af5ff" : "#ffc24d",
+        color: this.structColor(b),
+        done: !b.underConstruction,
       })),
       motes: [
         ...this.units.filter((f) => !f.dead).slice(0, 24).map((f) => ({ x: f.x, y: f.y, t: "unit" as const })),
@@ -2039,8 +2188,27 @@ export class GameScene extends Phaser.Scene {
       nodesMini: this.nodes.filter((n) => !n.dead && n.amount > 0).map((n) => ({ x: n.x, y: n.y, kind: n.kind })),
       citadelsDown: this.buildings.filter((b) => b.kind === "citadel" && b.destroyed).length,
       citadelsTotal: this.buildings.filter((b) => b.kind === "citadel").length,
+      gameSpeed: this.gameSpeed,
+      buildArmed: this.placeArmed,
     };
     bridge.emit("plt", snap);
+  }
+
+  private structLabel(b: Building): string {
+    if (b.kind === "house" && b.houseType) return HOUSE_DEFS[b.houseType].name;
+    if (b.kind === "citadel") return "VOID CITADEL";
+    if (b.kind === "market") return "MARKET CORE";
+    if (b.kind === "relay") return "RELAY SPIRE";
+    if (b.structId) return STRUCT_DEFS[b.structId].name;
+    return b.kind.toUpperCase();
+  }
+
+  private structColor(b: Building): string {
+    if (b.kind === "house" && b.houseType) return HOUSE_DEFS[b.houseType].colors.primary;
+    if (b.kind === "citadel") return "#ff4d5e";
+    if (b.kind === "relay") return b.owner === "player" ? "#3af5ff" : "#8f6bff";
+    if (b.structId) return STRUCT_DEFS[b.structId].color;
+    return "#ffc24d";
   }
 
   shutdown() {

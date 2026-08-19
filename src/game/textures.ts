@@ -231,6 +231,145 @@ export function createTextures(scene: Phaser.Scene) {
     g.fillStyle(0xeaffff, 1); g.fillCircle(15, 15, 2.2);
   });
 
+  // ── new roster units ─────────────────────────────
+  make("imp", 28, 30, (g) => {
+    diamond(g, 14, 27, 18, 8, "#000000", 0.3);
+    g.fillStyle(0x8a2418, 1); g.fillCircle(14, 17, 8);
+    g.fillStyle(0xff6b5e, 1);
+    g.fillPoints([P(7, 11), P(4, 3), P(11, 8)], true);
+    g.fillPoints([P(21, 11), P(24, 3), P(17, 8)], true);
+    g.fillStyle(0xffe066, 1); g.fillRect(10, 14, 3, 3); g.fillRect(16, 14, 3, 3);
+    g.fillStyle(0x3d120c, 1); g.fillRect(11, 21, 7, 2);
+  });
+  make("scout", 30, 36, (g) => {
+    diamond(g, 15, 33, 18, 8, "#000000", 0.3);
+    isoBox(g, 15, 31, 12, 8, "#1e4a6e");
+    isoBox(g, 15, 23, 10, 10, "#9fdcff");
+    g.fillStyle(0x0c2233, 1); g.fillCircle(15, 9, 4);
+    g.lineStyle(1.4, 0x9fdcff, 0.9); g.strokeCircle(15, 9, 4);
+    g.fillStyle(0xeaffff, 1); g.fillRect(13.5, 7.5, 3, 3);
+    g.lineStyle(1.2, 0x9fdcff, 0.7); g.lineBetween(21, 20, 27, 14);
+  });
+  make("bomber", 32, 34, (g) => {
+    diamond(g, 16, 31, 20, 9, "#000000", 0.3);
+    g.fillStyle(0x5e2c10, 1); g.fillCircle(16, 19, 10);
+    g.lineStyle(1.5, 0xff8b3e, 0.95); g.strokeCircle(16, 19, 10);
+    g.fillStyle(0xff8b3e, 0.2); g.fillCircle(16, 19, 10);
+    g.lineStyle(1.2, 0xffc24d, 0.85);
+    g.lineBetween(16, 9, 16, 4); g.strokeCircle(16, 3, 1.8);
+    g.fillStyle(0xffe066, 1); g.fillRect(11, 16, 3, 3); g.fillRect(18, 16, 3, 3);
+    g.fillStyle(0x3d1d0a, 1);
+    g.fillRect(8, 24, 4, 3); g.fillRect(20, 24, 4, 3);
+  });
+  make("guardian", 40, 52, (g) => {
+    diamond(g, 20, 48, 28, 12, "#000000", 0.3);
+    isoBox(g, 20, 46, 24, 20, "#1e3a5e");
+    isoBox(g, 20, 26, 20, 14, "#5ea8ff");
+    g.fillStyle(0x16293f, 1); g.fillCircle(20, 10, 5.5);
+    g.fillStyle(0x5ea8ff, 1); g.fillRect(17.5, 8, 5, 4);
+    g.lineStyle(2, 0x9fdcff, 0.9); g.strokeRect(6, 26, 7, 18);
+    g.fillStyle(0x5ea8ff, 0.35); g.fillRect(6, 26, 7, 18);
+  });
+  make("priest", 30, 40, (g) => {
+    diamond(g, 15, 37, 18, 8, "#000000", 0.3);
+    isoBox(g, 15, 35, 16, 12, "#8a7fa8");
+    isoBox(g, 15, 23, 12, 10, "#f5f0ff");
+    g.fillStyle(0xd8cfec, 1); g.fillCircle(15, 9, 4.5);
+    g.fillStyle(0xffd977, 1);
+    g.fillRect(13.5, 25, 3, 9); g.fillRect(11, 27.5, 8, 3);
+    g.lineStyle(1.2, 0xffd977, 0.8); g.strokeCircle(15, 6, 6);
+  });
+  make("titan", 58, 74, (g) => {
+    diamond(g, 29, 69, 42, 18, "#000000", 0.35);
+    isoBox(g, 29, 66, 38, 30, "#5e4a1e");
+    isoBox(g, 29, 36, 32, 22, "#ffd977");
+    isoBox(g, 29 - 21, 52, 12, 18, "#b8934a");
+    isoBox(g, 29 + 21, 52, 12, 18, "#b8934a");
+    g.fillStyle(0x3d2f10, 1); g.fillCircle(29, 13, 7);
+    g.fillStyle(0xffe9b0, 1); g.fillRect(25, 10, 8, 5);
+    g.fillStyle(0xffd977, 0.3); g.fillCircle(29, 40, 9);
+    g.lineStyle(2, 0xffe9b0, 0.8); g.strokeCircle(29, 40, 9);
+  });
+
+  // ── buildable structures ────────────────────────
+  make("scaffold", 70, 80, (g) => {
+    g.lineStyle(2, 0xffc24d, 0.7);
+    g.strokePoints([P(35, 6), P(64, 22), P(35, 38), P(6, 22)], true);
+    g.lineBetween(35, 6, 35, 70); g.lineBetween(6, 22, 6, 58); g.lineBetween(64, 22, 64, 58);
+    g.lineStyle(1, 0xffc24d, 0.45);
+    g.lineBetween(6, 58, 35, 70); g.lineBetween(64, 58, 35, 70);
+    g.lineBetween(6, 40, 64, 40); g.lineBetween(20, 13, 20, 63); g.lineBetween(50, 13, 50, 63);
+  });
+  make("struct_supply", 56, 78, (g) => {
+    const cx = 28, feet = 72;
+    diamond(g, cx, feet, 48, 24, "#0c2418", 0.85);
+    isoBox(g, cx, feet - 2, 24, 12, "#1e4a34");
+    g.fillStyle(0x12331f, 1);
+    g.fillPoints([P(cx - 7, feet - 14), P(cx + 7, feet - 14), P(cx + 3, feet - 52), P(cx - 3, feet - 52)], true);
+    g.fillStyle(0x6bff9e, 1); g.fillCircle(cx, feet - 56, 5);
+    g.fillStyle(0x6bff9e, 0.3); g.fillCircle(cx, feet - 56, 10);
+    g.lineStyle(1.5, 0x6bff9e, 0.85);
+    g.lineBetween(cx - 10, feet - 20, cx - 16, feet - 30); g.lineBetween(cx + 10, feet - 20, cx + 16, feet - 30);
+  });
+  make("struct_barracks", 90, 96, (g) => {
+    const cx = 45, feet = 88;
+    diamond(g, cx, feet, 82, 41, "#0c2233", 0.85);
+    isoBox(g, cx, feet - 2, 70, 34, "#1e3a5e");
+    isoBox(g, cx, feet - 36, 70, 10, "#3d5a8e");
+    g.fillStyle(0x16293f, 1);
+    g.fillPoints([P(cx - 35, feet - 46), P(cx, feet - 60), P(cx + 35, feet - 46), P(cx, feet - 32)], true);
+    g.fillStyle(0x3af5ff, 1); g.fillRect(cx - 4, feet - 24, 8, 14);
+    g.fillStyle(0x3af5ff, 0.25); g.fillRect(cx - 26, feet - 28, 12, 8); g.fillRect(cx + 14, feet - 28, 12, 8);
+    g.lineStyle(1.5, 0x3af5ff, 0.8); g.strokeCircle(cx, feet - 50, 5);
+  });
+  make("struct_foundry", 90, 96, (g) => {
+    const cx = 45, feet = 88;
+    diamond(g, cx, feet, 82, 41, "#2a0c22", 0.85);
+    isoBox(g, cx, feet - 2, 68, 32, "#5e1e4a");
+    isoBox(g, cx, feet - 34, 68, 10, "#8e3d70");
+    g.fillStyle(0x3d1233, 1); g.fillRect(cx + 14, feet - 58, 12, 24);
+    g.fillStyle(0xff3ec8, 0.3); g.fillCircle(cx + 20, feet - 60, 9);
+    g.fillStyle(0xff3ec8, 1); g.fillRect(cx - 20, feet - 22, 40, 4);
+    g.fillStyle(0xffc24d, 1); g.fillRect(cx - 6, feet - 16, 12, 8);
+    g.lineStyle(1.5, 0xff3ec8, 0.85); g.strokeCircle(cx - 18, feet - 30, 4);
+  });
+  make("struct_heavy", 90, 96, (g) => {
+    const cx = 45, feet = 88;
+    diamond(g, cx, feet, 82, 41, "#2a240c", 0.85);
+    isoBox(g, cx, feet - 2, 72, 30, "#5e4a1e");
+    isoBox(g, cx, feet - 32, 72, 12, "#8e7030");
+    g.fillStyle(0x3d3010, 1);
+    g.fillRect(cx - 30, feet - 48, 16, 18); g.fillRect(cx + 14, feet - 48, 16, 18);
+    g.fillStyle(0xffc24d, 1); g.fillRect(cx - 4, feet - 26, 8, 12);
+    g.lineStyle(2, 0xffc24d, 0.8);
+    g.lineBetween(cx - 34, feet - 8, cx - 20, feet - 8); g.lineBetween(cx + 20, feet - 8, cx + 34, feet - 8);
+    g.fillStyle(0xffe066, 0.9); g.fillCircle(cx, feet - 44, 4);
+  });
+  make("struct_sanctum", 90, 104, (g) => {
+    const cx = 45, feet = 96;
+    diamond(g, cx, feet, 82, 41, "#241e33", 0.85);
+    isoBox(g, cx, feet - 2, 64, 36, "#4a3d6e");
+    g.fillStyle(0x6e5e9e, 1);
+    g.fillPoints([P(cx - 32, feet - 38), P(cx, feet - 74), P(cx + 32, feet - 38)], true);
+    g.fillStyle(0xf5f0ff, 0.25); g.fillCircle(cx, feet - 20, 10);
+    g.lineStyle(1.5, 0xf5f0ff, 0.9); g.strokeCircle(cx, feet - 20, 10);
+    g.fillStyle(0xffd977, 1); g.fillCircle(cx, feet - 74, 4.5);
+    g.fillStyle(0xffd977, 0.3); g.fillCircle(cx, feet - 74, 10);
+    g.lineStyle(1.2, 0xf5f0ff, 0.7);
+    g.lineBetween(cx - 20, feet - 46, cx - 26, feet - 58); g.lineBetween(cx + 20, feet - 46, cx + 26, feet - 58);
+  });
+  make("struct_turret", 56, 74, (g) => {
+    const cx = 28, feet = 68;
+    diamond(g, cx, feet, 48, 24, "#000000", 0.35);
+    isoBox(g, cx, feet - 2, 40, 16, "#2a3450");
+    isoBox(g, cx, feet - 18, 26, 10, "#3d4a70");
+    g.fillStyle(0x141b30, 1);
+    g.fillPoints([P(cx - 5, feet - 28), P(cx + 5, feet - 28), P(cx + 4, feet - 52), P(cx - 4, feet - 52)], true);
+    g.fillStyle(0x3af5ff, 1); g.fillRect(cx - 3, feet - 56, 6, 5);
+    g.fillStyle(0x3af5ff, 0.3); g.fillCircle(cx, feet - 54, 8);
+    g.lineStyle(1.5, 0x3af5ff, 0.8); g.strokeCircle(cx, feet - 8, 13);
+  });
+
   make("watcher", 34, 42, (g) => {
     const cx = 17, feet = 38;
     diamond(g, cx, feet, 22, 11, "#000000", 0.3);

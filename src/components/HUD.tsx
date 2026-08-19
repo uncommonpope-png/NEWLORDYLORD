@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { useEffect, useRef } from "react";
 import type { ReactElement, ReactNode } from "react";
-import { bridge, PltSnapshot, RESOURCE_META, fmt, HOUSE_DEFS, OBJECTIVE, WEAPON_DEFS, UNIT_DEFS, TURRET_COST, TURRET_MAX, WeaponId, UnitId } from "../game/bridge";
+import { bridge, PltSnapshot, RESOURCE_META, fmt, HOUSE_DEFS, OBJECTIVE, WEAPON_DEFS, UNIT_DEFS, UNIT_ORDER, STRUCT_DEFS, TURRET_COST, TURRET_MAX, WeaponId, UnitId, StructId } from "../game/bridge";
 
 export type LogEntry = { msg: string; tone: "good" | "bad" | "sys" };
 
@@ -118,7 +119,7 @@ export function Minimap({ snap }: { snap: PltSnapshot }) {
     <div className="absolute bottom-3 right-3 z-10 pointer-events-none">
       <div className="holo-panel-sm p-1.5">
         <canvas ref={ref} width={MM_W} height={MM_H} className="block" />
-        <div className="font-mono text-[8px] text-[#42557f] tracking-[0.25em] text-center mt-1">OPEN WORLD · 40×40</div>
+        <div className="font-mono text-[8px] text-[#42557f] tracking-[0.25em] text-center mt-1">OPEN WORLD · 56×56</div>
       </div>
     </div>
   );
@@ -136,6 +137,154 @@ export function ResourceReadout({ res, value, r }: { res: "p" | "l" | "t"; value
       <div className="leading-none">
         <div className="font-mono text-[15px] font-semibold" style={{ color: meta.color }}>{fmt(value)}</div>
         <div className="font-mono text-[9px] mt-0.5" style={{ color: rateColor }}>{meta.label} {rate(r)}/s</div>
+      </div>
+    </div>
+  );
+}
+
+// ── warcraft command card (train units / build structures) ──────────
+function CostLine({ p, l, t }: { p: number; l: number; t: number }) {
+  return (
+    <span className="flex items-center gap-1.5 font-mono text-[8.5px] leading-none">
+      {p > 0 && <span style={{ color: RESOURCE_META.p.color }}>{p}P</span>}
+      {l > 0 && <span style={{ color: RESOURCE_META.l.color }}>{l}L</span>}
+      {t > 0 && <span style={{ color: RESOURCE_META.t.color }}>{t}T</span>}
+    </span>
+  );
+}
+
+function UnitGlyph({ color, kind, s = 26 }: { color: string; kind: string; s?: number }) {
+  const shapes: Record<string, ReactElement> = {
+    imp: <polygon points="12,3 21,20 3,20" fill={color} />,
+    knight: <rect x="5" y="5" width="14" height="14" fill={color} />,
+    scout: <polygon points="12,2 22,12 12,22 2,12" fill="none" stroke={color} strokeWidth="2.5" />,
+    lancer: <polygon points="12,2 15,10 22,12 15,14 12,22 9,14 2,12 9,10" fill={color} />,
+    bomber: <circle cx="12" cy="12" r="8" fill="none" stroke={color} strokeWidth="2.5" />,
+    golem: <rect x="4" y="4" width="16" height="16" fill="none" stroke={color} strokeWidth="2.5" />,
+    guardian: <path d="M12 2 L21 6 V13 C21 18 17 21 12 22 C7 21 3 18 3 13 V6 Z" fill={color} />,
+    priest: <path d="M12 2 L14 9 L21 9 L15.5 13.5 L17.5 21 L12 16.5 L6.5 21 L8.5 13.5 L3 9 L10 9 Z" fill={color} />,
+    titan: <polygon points="12,1 15,8 22,8 16.5,12.5 18.5,20 12,15.5 5.5,20 7.5,12.5 2,8 9,8" fill="none" stroke={color} strokeWidth="2" />,
+    gleaner: <circle cx="12" cy="12" r="6" fill={color} />,
+  };
+  return <svg width={s} height={s} viewBox="0 0 24 24">{shapes[kind] ?? shapes.knight}</svg>;
+}
+
+function StructGlyph({ color, kind, s = 26 }: { color: string; kind: string; s?: number }) {
+  const shapes: Record<string, ReactElement> = {
+    supply: <polygon points="12,2 15,9 12,22 9,9" fill={color} />,
+    barracks: <g><rect x="3" y="10" width="18" height="11" fill={color} /><polygon points="2,10 12,3 22,10" fill="none" stroke={color} strokeWidth="2" /></g>,
+    foundry: <g><rect x="4" y="8" width="16" height="13" fill={color} /><circle cx="12" cy="5" r="3" fill="none" stroke={color} strokeWidth="2" /></g>,
+    heavy: <g><rect x="3" y="6" width="18" height="15" fill="none" stroke={color} strokeWidth="2.5" /><rect x="8" y="11" width="8" height="10" fill={color} /></g>,
+    sanctum: <polygon points="12,1 20,21 4,21" fill="none" stroke={color} strokeWidth="2.5" />,
+    turret: <g><rect x="9" y="4" width="6" height="12" fill={color} /><rect x="4" y="16" width="16" height="6" fill="none" stroke={color} strokeWidth="2" /></g>,
+  };
+  return <svg width={s} height={s} viewBox="0 0 24 24">{shapes[kind] ?? shapes.barracks}</svg>;
+}
+
+export interface CommandCardProps {
+  snap: PltSnapshot;
+  onProd: (id: UnitId) => void;
+  onPlace: (id: StructId) => void;
+  onSpeed: () => void;
+}
+
+export function CommandCard({ snap, onProd, onPlace, onSpeed }: CommandCardProps) {
+  const [tab, setTab] = useState<"train" | "build">("train");
+  const builtKinds = new Set(snap.buildings3d.filter((b) => b.done).map((b) => b.kind));
+  const isLocked = (req: StructId | null) => !!req && !builtKinds.has(req);
+
+  return (
+    <div className="absolute bottom-4 right-4 z-10 w-[270px] pointer-events-auto">
+      <div className="holo-panel p-2.5">
+        <div className="flex items-center gap-1.5 mb-2">
+          <button className={`tab-btn flex-1 ${tab === "train" ? "active" : ""}`} onClick={() => setTab("train")}>TRAIN</button>
+          <button className={`tab-btn flex-1 ${tab === "build" ? "active" : ""}`} onClick={() => setTab("build")}>BUILD</button>
+          <button
+            onClick={onSpeed}
+            className="font-mono text-[9px] px-2 py-1 border border-[#1c2c52] cursor-pointer hover:border-[#ffc24d88] hover:text-[#ffc24d] transition-colors"
+            style={{ color: snap.gameSpeed > 1 ? "#ffc24d" : "#6f86b8" }}
+            title="cycle simulation speed"
+          >
+            {snap.gameSpeed}×
+          </button>
+        </div>
+
+        {snap.buildArmed && (
+          <div className="mb-2 px-2 py-1.5 border border-[#ffc24d66] bg-[#ffc24d0f] font-mono text-[9px] text-[#ffc24d] text-center">
+            PLACING :: {snap.buildArmed.toUpperCase()} — click ground · right-click cancel
+          </div>
+        )}
+
+        {tab === "train" ? (
+          <div className="grid grid-cols-3 gap-1.5">
+            {UNIT_ORDER.map((id) => {
+              const def = UNIT_DEFS[id];
+              const locked = isLocked(def.requires);
+              const broke = snap.p < def.cost.p || snap.l < def.cost.l || snap.t < def.cost.t;
+              const supplyFull = snap.supply >= snap.supplyMax;
+              const disabled = locked || broke;
+              const reqName = def.requires ? STRUCT_DEFS[def.requires].name : "";
+              return (
+                <button
+                  key={id}
+                  onClick={() => onProd(id)}
+                  disabled={disabled}
+                  title={locked
+                    ? `LOCKED :: requires ${reqName}`
+                    : `${def.name} :: ${def.desc} (${def.supply} supply)`}
+                  className="relative flex flex-col items-center gap-1 p-1.5 border transition-all cursor-pointer group"
+                  style={{
+                    borderColor: disabled ? "#16233f" : `${def.color}55`,
+                    background: disabled ? "rgba(8,12,26,0.5)" : `${def.color}0d`,
+                    opacity: disabled ? 0.45 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 12px ${def.color}44`; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+                >
+                  <UnitGlyph color={def.color} kind={id} />
+                  <span className="font-display text-[7px] leading-none text-center" style={{ color: def.color }}>{def.name.split(" ")[1] ?? def.name.split(" ")[0]}</span>
+                  <CostLine {...def.cost} />
+                  {locked && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-[rgba(4,6,15,0.6)]">
+                      <svg width="14" height="14" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" fill="none" stroke="#6f86b8" strokeWidth="1.5" /><path d="M5 7 V5 a3 3 0 0 1 6 0 V7" fill="none" stroke="#6f86b8" strokeWidth="1.5" /></svg>
+                    </span>
+                  )}
+                  {supplyFull && !locked && <span className="absolute top-0.5 right-0.5 font-mono text-[7px] text-[#ff4d5e]">!</span>}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-1.5">
+            {(Object.keys(STRUCT_DEFS) as StructId[]).map((id) => {
+              const def = STRUCT_DEFS[id];
+              const broke = snap.p < def.cost.p || snap.l < def.cost.l || snap.t < def.cost.t;
+              const maxed = id === "turret" && snap.turretCount >= TURRET_MAX;
+              const disabled = broke || maxed;
+              return (
+                <button
+                  key={id}
+                  onClick={() => onPlace(id)}
+                  disabled={disabled}
+                  title={`${def.name} :: ${def.desc}`}
+                  className="relative flex flex-col items-center gap-1 p-1.5 border transition-all cursor-pointer"
+                  style={{
+                    borderColor: disabled ? "#16233f" : `${def.color}55`,
+                    background: disabled ? "rgba(8,12,26,0.5)" : `${def.color}0d`,
+                    opacity: disabled ? 0.45 : 1,
+                  }}
+                  onMouseEnter={(e) => { if (!disabled) (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 12px ${def.color}44`; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+                >
+                  <StructGlyph color={def.color} kind={id} />
+                  <span className="font-display text-[7px] leading-none text-center" style={{ color: def.color }}>{def.name.split(" ")[1] ?? def.name.split(" ")[0]}</span>
+                  <CostLine {...def.cost} />
+                  {maxed && <span className="absolute top-0.5 right-0.5 font-mono text-[7px] text-[#ff4d5e]">MAX</span>}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -330,7 +479,6 @@ function HotSlot({ label, sub, color, cd, cdMax, armed, disabled, onClick, child
 
 export function Hotbar({ snap, onArm, onProd, onTurret }: HotbarProps) {
   const weapons = (Object.keys(WEAPON_DEFS) as WeaponId[]);
-  const units = (Object.keys(UNIT_DEFS) as UnitId[]);
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-end gap-2 pointer-events-auto">
       <div className="holo-panel p-2 flex gap-1.5 items-end">
@@ -352,33 +500,6 @@ export function Hotbar({ snap, onArm, onProd, onTurret }: HotbarProps) {
             </HotSlot>
           );
         })}
-      </div>
-      <div className="holo-panel p-2 flex gap-1.5 items-end">
-        <div className="font-display text-[8px] text-[#6f86b8] px-1 pb-1 self-center" style={{ writingMode: "vertical-rl" }}>FORGE</div>
-        {units.map((id) => {
-          const def = UNIT_DEFS[id];
-          const costTxt = `${def.cost.p}P${def.cost.l ? `+${def.cost.l}L` : ""}${def.cost.t ? `+${def.cost.t}T` : ""}`;
-          const broke = snap.p < def.cost.p || snap.l < def.cost.l || snap.t < def.cost.t;
-          const noSupply = snap.supply + def.supply > snap.supplyMax;
-          return (
-            <HotSlot
-              key={id} label={def.key} sub={`${costTxt}`} color={def.color}
-              cd={0} cdMax={0} disabled={broke || noSupply}
-              onClick={() => onProd(id)}
-              title={`${def.name} [${def.key}] :: ${def.desc} — supply ${def.supply}`}
-            >
-              <UnitIcon kind={id} />
-            </HotSlot>
-          );
-        })}
-        <HotSlot
-          label="T" sub={`${TURRET_COST.p}P+${TURRET_COST.t}T`} color="#3af5ff"
-          cd={0} cdMax={0} disabled={snap.p < TURRET_COST.p || snap.t < TURRET_COST.t || snap.turretCount >= TURRET_MAX}
-          onClick={onTurret}
-          title={`Defense Turret [T] :: auto-fires on bugs near its position`}
-        >
-          <IconTurret />
-        </HotSlot>
       </div>
       {snap.armed && (
         <div className="holo-panel-sm px-3 py-2 font-mono text-[10px] animate-pulse" style={{ color: WEAPON_DEFS[snap.armed].color }}>
