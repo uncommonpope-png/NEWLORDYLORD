@@ -64,8 +64,8 @@ const WEAPON_ICONS: Record<WeaponId, (p: { s?: number }) => ReactElement> = {
 
 // ── minimap (phase 8) ────────────────────────────────────────────────
 const MM_W = 176, MM_H = 120;
-const mmx = (x: number) => ((x + 1500) / 3000) * MM_W;
-const mmy = (y: number) => ((y + 160) / 1560) * MM_H;
+const mmx = (x: number) => ((x + 1050) / 2100) * MM_W;
+const mmy = (y: number) => ((y + 60) / 1020) * MM_H;
 
 export function Minimap({ snap }: { snap: PltSnapshot }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -77,12 +77,12 @@ export function Minimap({ snap }: { snap: PltSnapshot }) {
     ctx.clearRect(0, 0, MM_W, MM_H);
     ctx.fillStyle = "rgba(4,6,15,0.85)";
     ctx.fillRect(0, 0, MM_W, MM_H);
-    // capital district (inner 16×16 of the 40×40 world)
+    // capital district around the Market Core
     ctx.beginPath();
-    ctx.moveTo(mmx(0), mmy(384));
-    ctx.lineTo(mmx(512), mmy(640));
-    ctx.lineTo(mmx(0), mmy(896));
-    ctx.lineTo(mmx(-512), mmy(640));
+    ctx.moveTo(mmx(0), mmy(192));
+    ctx.lineTo(mmx(256), mmy(320));
+    ctx.lineTo(mmx(0), mmy(448));
+    ctx.lineTo(mmx(-256), mmy(320));
     ctx.closePath();
     ctx.fillStyle = "rgba(34,60,40,0.5)";
     ctx.fill();

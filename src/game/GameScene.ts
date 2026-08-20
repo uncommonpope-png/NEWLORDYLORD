@@ -120,6 +120,7 @@ interface Projectile {
   targetB: Building | null;
   lx: number; ly: number;
   speed: number; dmg: number;
+  splash?: number;
   dead: boolean;
 }
 
@@ -128,7 +129,7 @@ interface Blast { x: number; y: number; t: number; r: number; dmg: number; hit: 
 export class GameScene extends Phaser.Scene {
   // world
   private solids: boolean[][] = [];
-  private walkExtents = { minC: -4, maxC: 44, minR: -4, maxR: 44 };
+  private walkExtents = { minC: -4, maxC: 60, minR: -4, maxR: 60 };
   private groundTiles: Phaser.GameObjects.Image[] = [];
   private parallax: { obj: Phaser.GameObjects.Image; f: number; bx: number; by: number }[] = [];
   private worldBounds = { x: 0, y: 0, w: 0, h: 0 };
@@ -572,7 +573,7 @@ export class GameScene extends Phaser.Scene {
     const yMax = (this.walkExtents.maxC + this.walkExtents.maxR) * (TILE_H / 2);
     this.worldBounds = { x: xMin - 200, y: yMin - 320, w: xMax - xMin + 400, h: yMax - yMin + 560 };
     this.cameras.main.setBounds(this.worldBounds.x, this.worldBounds.y, this.worldBounds.w, this.worldBounds.h);
-    const start = cartToIso(7.5, 13);
+    const start = cartToIso(20, 20);
     this.cameras.main.centerOn(start.x, start.y - 60).setZoom(0.82);
     this.tweens.add({
       targets: this.cameras.main, zoom: 1, duration: 1600, ease: "Cubic.easeOut",
@@ -1707,8 +1708,10 @@ export class GameScene extends Phaser.Scene {
         else f.targetB = b;
       }
 
-      // acquire target
-      if (!f.targetF && !f.targetB && !frozen) {
+      // acquire target (healers never seek blood — they seek the wounded)
+      const unitDef = UNIT_DEFS[f.kind as UnitId];
+      const isHealer = f.side === "player" && !!unitDef?.healer;
+      if (!f.targetF && !f.targetB && !frozen && !isHealer) {
         let bd = aggro, best: Fighter | null = null;
         for (const e of foes) {
           const d = Phaser.Math.Distance.Between(f.x, f.y, e.x, e.y);
@@ -1723,6 +1726,27 @@ export class GameScene extends Phaser.Scene {
           }
           // enemies always siege; player units only attack buildings on explicit order
           if (f.side === "enemy") f.targetB = bestB;
+        }
+      }
+
+      // healer: hotfix the most wounded ally in range instead of fighting
+      if (isHealer && !frozen && f.atkCd <= 0) {
+        let patient: Fighter | null = null, worst = 0.999;
+        for (const ally of [...this.units, this.avatar]) {
+          if (ally.dead || ally === f) continue;
+          const ratio = ally.hp / ally.hpMax;
+          const dd = Phaser.Math.Distance.Between(f.x, f.y, ally.x, ally.y);
+          if (ratio < worst && dd < 150) { worst = ratio; patient = ally; }
+        }
+        if (patient) {
+          f.atkCd = f.atkCdMax;
+          const heal = 14;
+          patient.hp = Math.min(patient.hpMax, patient.hp + heal);
+          patient.hpDirty = true;
+          patient.flash = 0.12;
+          this.floatText(patient.x, patient.y - patient.barY - 6, `+${heal}`, "#6bff9e");
+          this.burst(patient.x, patient.y - 14, 0x6bff9e, 4);
+          sfx.heal();
         }
       }
 
@@ -1755,13 +1779,14 @@ export class GameScene extends Phaser.Scene {
           if (f.atkCd <= 0) {
             f.atkCd = f.atkCdMax;
             if (f.ranged) {
-              this.fireProjectile(f.x, f.y - 26, f.targetF, f.targetB, f.dmg, f.side);
+              this.fireProjectile(f.x, f.y - 26, f.targetF, f.targetB, f.dmg, f.side, unitDef?.splash);
               sfx.laser();
             } else {
+              const siege = unitDef?.siegeBonus ?? 1;
               if (f.targetF) this.damageFighter(f.targetF, f.dmg, f.side === "player" ? "player" : "enemy");
               else if (f.targetB) {
-                this.damageBuilding(f.targetB, f.dmg);
-                this.burst(f.targetB.sx, f.targetB.sy - 30, 0xffc24d, 3);
+                this.damageBuilding(f.targetB, f.dmg * siege);
+                this.burst(f.targetB.sx, f.targetB.sy - 30, siege > 1 ? 0xff8b3e : 0xffc24d, siege > 1 ? 7 : 3);
                 sfx.hit();
               }
             }
@@ -1895,9 +1920,25 @@ export class GameScene extends Phaser.Scene {
       if (d <= step + 4) {
         p.dead = true;
         p.sprite.destroy();
-        this.burst(p.lx, p.ly, 0x3af5ff, 4);
-        if (p.targetF && !p.targetF.dead) this.damageFighter(p.targetF, p.dmg, "player");
-        else if (p.targetB && !p.targetB.destroyed) { this.damageBuilding(p.targetB, p.dmg); sfx.hit(); }
+        if (p.splash) {
+          // Fork Bomber payload detonates
+          for (const e of this.enemies) {
+            if (e.dead) continue;
+            if (Phaser.Math.Distance.Between(p.x, p.y, e.x, e.y) < p.splash) {
+              this.damageFighter(e, p.dmg * (e === p.targetF ? 1 : 0.7), "player");
+            }
+          }
+          if (p.targetB && !p.targetB.destroyed && Phaser.Math.Distance.Between(p.x, p.y, p.targetB.sx, p.targetB.sy) < p.splash + p.targetB.solidR) {
+            this.damageBuilding(p.targetB, p.dmg);
+          }
+          this.burst(p.lx, p.ly, 0xff8b3e, 16);
+          this.shakeCam(0.0035);
+          sfx.boom();
+        } else {
+          this.burst(p.lx, p.ly, 0x3af5ff, 4);
+          if (p.targetF && !p.targetF.dead) this.damageFighter(p.targetF, p.dmg, "player");
+          else if (p.targetB && !p.targetB.destroyed) { this.damageBuilding(p.targetB, p.dmg); sfx.hit(); }
+        }
       } else {
         p.x += ((p.lx - p.x) / d) * step;
         p.y += ((p.ly - p.y) / d) * step;
@@ -1930,13 +1971,14 @@ export class GameScene extends Phaser.Scene {
     if (Math.abs(vx) > 0.1 && f.kind !== "avatar") f.sprite.setFlipX(vx < 0);
   }
 
-  private fireProjectile(x: number, y: number, targetF: Fighter | null, targetB: Building | null, dmg: number, _side: "player" | "enemy") {
+  private fireProjectile(x: number, y: number, targetF: Fighter | null, targetB: Building | null, dmg: number, _side: "player" | "enemy", splash?: number) {
     const sprite = this.add.image(x, y, targetB ? "ebolt" : "bolt").setDepth(950);
+    if (splash) sprite.setTint(0xff8b3e).setScale(1.3);
     this.projectiles.push({
       sprite, x, y, targetF, targetB,
       lx: targetF ? targetF.x : targetB ? targetB.sx : x,
       ly: targetF ? targetF.y - 14 : targetB ? targetB.sy - 40 : y,
-      speed: 340, dmg, dead: false,
+      speed: splash ? 260 : 340, dmg, splash, dead: false,
     });
   }
 

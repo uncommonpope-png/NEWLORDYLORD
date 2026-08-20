@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { mountGame } from "./game/main";
-import { bridge, BridgeCommands, PltSnapshot, EndStats, HouseId, UnitId, WeaponId, fmt } from "./game/bridge";
+import { bridge, BridgeCommands, PltSnapshot, EndStats, HouseId, UnitId, WeaponId, StructId, fmt } from "./game/bridge";
 import { sfx } from "./game/audio";
-import { TopBar, PromptBar, LogPanel, Hotbar, WarPanel, SelectionPanel, WaveBanner, Minimap, LogEntry } from "./components/HUD";
+import { TopBar, PromptBar, LogPanel, Hotbar, WarPanel, SelectionPanel, WaveBanner, Minimap, CommandCard, LogEntry } from "./components/HUD";
 import { BootScreen, HouseSelect, MarketTerminal, PauseScreen, EndScreen } from "./components/Overlays";
 import { TerminalShell } from "./components/TerminalShell";
 import { mountCommandCenter } from "./game/CommandCenter";
@@ -186,6 +186,12 @@ export default function App() {
             onArm={(id: WeaponId | null) => gameCommand("arm", { id })}
             onProd={(id: UnitId) => gameCommand("prod", { unit: id })}
             onTurret={() => gameCommand("buildTurret", {})}
+          />
+          <CommandCard
+            snap={snap}
+            onProd={(id: UnitId) => gameCommand("prod", { unit: id })}
+            onPlace={(id: StructId) => gameCommand("place", { id })}
+            onSpeed={() => gameCommand("speed", {})}
           />
           <PromptBar prompt={prompt} />
           <WaveBanner wave={wave} />

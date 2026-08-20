@@ -93,7 +93,7 @@ const BOOT_LINES = [
   "> soul weapons charged :: BLADE / ARROW / SHIELD / CANNON",
   "> PLT ledger synchronized [PROFIT·LOVE·TAX]",
   "> decree 12 :: deposits split 60/20/20 — wallet / GSK treasury / entropy burn",
-  "> open world 40×40 charted :: 6 void citadels · 14 resource nodes",
+  "> open world 56×56 charted :: 6 void citadels · 14 resource nodes",
   "> gleaner protocol loaded :: harvest crystals & blooms for PLT",
   "> awaiting commander…",
 ];
@@ -112,7 +112,7 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
           <div className="font-mono text-[11px] text-[#ff3ec8] tracking-[0.3em] mb-3">PROJECT // 2D SPATIAL OPERATING SYSTEM + WAR PROTOCOL</div>
           <h1 className="font-display text-[78px] leading-[0.95] text-[#eaffff] title-glow">SOUL<br />FEILD</h1>
           <p className="font-body text-[15px] text-[#9fb4dd] mt-4 max-w-[460px] leading-relaxed">
-            The map is a filesystem — now an <span className="text-[#3af5ff]">open 40×40 world</span>. The units are agents. The fog is untested code —
+            The map is a filesystem — now an <span className="text-[#3af5ff]">open 56×56 world</span>. The units are agents. The fog is untested code —
             and scattered across the wilds, <span className="text-[#ff4d5e]"> six Void Citadels are compiling bugs against you</span>. Harvest
             <span className="text-[#6bff9e]"> Data Crystals</span> and <span className="text-[#ff5ad1]">Heart Blooms</span> with Gleaners, build the
             economy, raise an army, and purge the source.

@@ -102,6 +102,7 @@ class SoulAudio {
     [440, 554, 659, 880].forEach((f, i) => this.tone("triangle", f, f * 1.01, 0.14, 0.14, i * 0.07));
   }
   coin() { this.tone("square", 1180, 1560, 0.07, 0.09); this.tone("square", 1560, 2100, 0.09, 0.07, 0.05); }
+  heal() { this.tone("sine", 660, 990, 0.14, 0.09); this.tone("sine", 880, 1320, 0.12, 0.07, 0.06); }
   handshake() { this.tone("sine", 392, 392, 0.1, 0.12); this.tone("sine", 587, 587, 0.14, 0.12, 0.1); }
 
   // ── COMBAT ─────────────────────────────────────────
