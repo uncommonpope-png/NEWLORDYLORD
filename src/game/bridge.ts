@@ -70,7 +70,7 @@ export type UnitId =
   | "guardian" | "priest" | "titan"
   | "gleaner";
 
-export type StructId = "supply" | "barracks" | "foundry" | "heavy" | "sanctum" | "turret";
+export type StructId = "supply" | "barracks" | "foundry" | "heavy" | "sanctum" | "turret" | "rig" | "grove" | "vault" | "garrison";
 
 export interface UnitDef {
   id: UnitId;
@@ -161,6 +161,9 @@ export interface StructDef {
   desc: string;
   unlocks: UnitId[];
   footprint: number;
+  needsNode?: boolean;      // must be placed beside a resource node
+  yields?: { p: number; l: number; t: number };
+  attractsRaids?: boolean;  // pirates covet it
 }
 
 export const STRUCT_DEFS: Record<StructId, StructDef> = {
