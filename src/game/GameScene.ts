@@ -154,6 +154,22 @@ interface SoulHome {
 
 interface GardenPlotState { seed: string | null; plantedAt: number; watered: boolean; ready: boolean; }
 
+// ── FEEL layer :: loot orbs & weather ────────────────────────────────
+interface LootOrb {
+  sprite: Phaser.GameObjects.Image;
+  glow: Phaser.GameObjects.Image;
+  x: number; y: number; vx: number; vy: number;
+  value: number; kind: "p" | "l";
+  life: number;
+  magnet: boolean;
+}
+
+interface WeatherMote {
+  sprite: Phaser.GameObjects.Image;
+  x: number; y: number; vx: number; vy: number;
+  life: number;
+}
+
 // ── world dressing :: pedestrians & ambient motes ────────────────────
 interface Ped {
   sprite: Phaser.GameObjects.Image;
@@ -233,6 +249,17 @@ export class GameScene extends Phaser.Scene {
   private civilians: Ped[] = [];
   private motes: Mote[] = [];
   private tintRect: Phaser.GameObjects.Graphics | null = null;
+
+  // ── FEEL layer: loot, dash, hitstop, weather ──
+  private lootOrbs: LootOrb[] = [];
+  private weather: WeatherMote[] = [];
+  private hitstopT = 0;           // seconds of frozen time remaining
+  private dashCd = 0;
+  private dashT = 0;              // active dash time remaining
+  private dashDir = { x: 0, y: 0 };
+  private trailGhostT = 0;
+  private comboCount = 0;
+  private comboT = 0;
   private auditTimer = 45;
   private audits = 0;
   private depositsPlt = 0;
@@ -896,6 +923,7 @@ export class GameScene extends Phaser.Scene {
       // ── RPG layer commands ──
       bridge.onCommand("catch", () => this.attemptCatch()),
       bridge.onCommand("jump", () => this.jumpAvatar()),
+      bridge.onCommand("dash", () => this.tryDash()),
       bridge.onCommand("sprint", (on) => { this.sprinting = on; }),
       bridge.onCommand("joy", (v) => { this.joyVec = { x: v.x, y: v.y }; }),
       bridge.onCommand("towerAscend", () => this.towerAscend()),
@@ -1534,11 +1562,25 @@ export class GameScene extends Phaser.Scene {
     if (f.dead) return;
     if (from === "enemy" && f.invuln > 0) return;
     if (from === "player" && f.marked > 0) dmg *= 1.25; // Lantern mark
+    // critical hit — 15% chance, double damage, big feedback
+    let isCrit = false;
+    if (from === "player" && Math.random() < 0.15) {
+      dmg *= 2;
+      isCrit = true;
+    }
     f.hp -= dmg;
     f.hpDirty = true;
     f.flash = 0.12;
-    this.floatText(f.x, f.y - f.barY - 6, `-${Math.round(dmg)}`, from === "player" ? "#ffe066" : "#ff4d5e");
-    sfx.hit();
+    if (isCrit) {
+      this.floatText(f.x, f.y - f.barY - 22, "CRIT!", "#ff8b3e");
+      this.floatText(f.x, f.y - f.barY - 6, `-${Math.round(dmg)}`, "#ff8b3e");
+      this.burst(f.x, f.y - 14, 0xff8b3e, 8);
+      this.shakeCam(3);
+      sfx.crit();
+    } else {
+      this.floatText(f.x, f.y - f.barY - 6, `-${Math.round(dmg)}`, from === "player" ? "#ffe066" : "#ff4d5e");
+      sfx.hit();
+    }
     if (f.hp <= 0) this.killFighter(f);
   }
 
@@ -1564,10 +1606,20 @@ export class GameScene extends Phaser.Scene {
     if (f.side === "enemy") {
       this.kills++;
       this.activity("kill");
-      this.plt.p += f.loot;
-      this.floatText(f.x, f.y - 30, `+${f.loot}P`, "#ffc24d");
-      this.burst(f.x, f.y - 12, 0xff4d5e, 10);
-      sfx.death();
+      // combo streak
+      this.comboCount++;
+      this.comboT = 2.5;
+      // spawn physical loot orbs instead of auto-granting PLT
+      this.spawnLoot(f.x, f.y, f.loot);
+      // escalating explosion + hitstop for satisfying kills
+      const big = f.hpMax > 150;
+      this.bigBurst(f.x, f.y - 12, 0xff4d5e, big ? 18 : 10);
+      this.shakeCam(big ? 8 : 4);
+      this.hitstop(big ? 0.09 : 0.045);
+      if (big) sfx.bigBoom(); else sfx.death();
+      if (this.comboCount >= 3) {
+        this.floatText(f.x, f.y - 52, `×${this.comboCount} COMBO`, "#3af5ff");
+      }
       // RPG progression
       this.gainXp(8 + Math.round(f.loot / 6));
       this.addRep("debuggers", 6);
@@ -1764,9 +1816,19 @@ export class GameScene extends Phaser.Scene {
     const rawDt = Math.min(delta / 1000, 0.05);
     this.updateAmbient(rawDt);
     if (!this.started || this.ended) return;
+
+    // hitstop — briefly freeze the world on big kills (juice)
+    if (this.hitstopT > 0) {
+      this.hitstopT -= rawDt;
+      this.updateAtmosphere(rawDt);
+      this.updateCamera(rawDt);
+      return;
+    }
+
     if (!this.paused) {
       const dt = rawDt * this.gameSpeed;
       this.playTime += dt;
+      this.updateDash(dt);
       this.updatePlayer(dt);
       this.updateOrdersAndCombat(dt);
       this.updateProduction(dt);
@@ -1783,8 +1845,12 @@ export class GameScene extends Phaser.Scene {
       this.updateCritters(dt);
       this.updateParty(dt);
       this.updateCivilians(dt);
+      this.updateLootOrbs(dt);
+      this.comboT = Math.max(0, this.comboT - dt);
+      if (this.comboT <= 0) this.comboCount = 0;
     }
     this.updateAtmosphere(rawDt);
+    this.updateWeather(rawDt);
     this.updatePrompts();
     this.updateCamera(rawDt);
     if (this.time.now % 2 < 1.2) this.pushSnapshot();
@@ -1849,7 +1915,14 @@ export class GameScene extends Phaser.Scene {
 
     const entropyFactor = this.plt.t > this.plt.p + this.plt.l ? 0.72 : 1;
     const rogueBonus = this.factionRep.rogue >= 500 ? 1.12 : 1;
+    // remember facing for dashing
     if (dx !== 0 || dy !== 0) {
+      const l = Math.hypot(dx, dy) || 1;
+      this.dashDir = { x: dx / l, y: dy / l };
+    }
+    // dash owns movement while active
+    if (this.dashT > 0) { /* updateDash handles it */ }
+    else if (dx !== 0 || dy !== 0) {
       this.avatar.order = null; // manual control overrides orders
       const len = Math.hypot(dx, dy);
       const sp = this.avatar.speed * entropyFactor * rogueBonus * (this.sprinting ? 1.55 : 1);
@@ -2372,7 +2445,8 @@ export class GameScene extends Phaser.Scene {
     if (this.started && !this.ended && !this.terminalOpen && !this.paused) {
       if (kb.JustDown(this.keys.C)) this.attemptCatch();
       if (kb.JustDown(this.keys.SPACE)) this.jumpAvatar();
-      this.sprinting = this.keys.SHIFT.isDown;
+      if (kb.JustDown(this.keys.SHIFT)) this.tryDash();
+      this.sprinting = this.keys.SHIFT.isDown && this.dashT <= 0;
     }
     if (kb.JustDown(this.keys.ESC)) {
       if (this.armed) { this.armed = null; }
@@ -2870,6 +2944,150 @@ export class GameScene extends Phaser.Scene {
     this.ticker.unshift({ t: ts, msg, tone });
     if (this.ticker.length > 30) this.ticker.pop();
     bridge.emit("ticker", { t: ts, msg, tone });
+  }
+
+  // ═══════════════════════════ FEEL :: LOOT ORBS ══════════════════════
+  private spawnLoot(x: number, y: number, value: number) {
+    const n = Math.max(2, Math.min(6, Math.round(value / 8)));
+    const per = value / n;
+    for (let i = 0; i < n; i++) {
+      const kind: "p" | "l" = Math.random() < 0.82 ? "p" : "l";
+      const ang = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const sp = Phaser.Math.FloatBetween(60, 150);
+      const sprite = this.add.image(x, y - 10, "coin").setDepth(996).setScale(0.8)
+        .setTint(kind === "p" ? 0xffc24d : 0xff5ad1);
+      sprite.setData("restY", y + 4);
+      const glow = this.add.image(x, y - 10, "glow").setDepth(995).setScale(0.3)
+        .setTint(kind === "p" ? 0xffc24d : 0xff5ad1).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5);
+      this.lootOrbs.push({
+        sprite, glow, x, y: y - 10,
+        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp * 0.5 - 90,
+        value: per, kind, life: 14, magnet: false,
+      });
+    }
+  }
+
+  private updateLootOrbs(dt: number) {
+    const ax = this.avatar.x, ay = this.avatar.y;
+    for (const o of this.lootOrbs) {
+      o.life -= dt;
+      const d = Phaser.Math.Distance.Between(o.x, o.y, ax, ay);
+      if (d < 150) o.magnet = true;
+      if (o.magnet && !this.avatar.dead) {
+        const pull = 620;
+        o.vx += ((ax - o.x) / (d || 1)) * pull * dt * 3;
+        o.vy += ((ay - o.y) / (d || 1)) * pull * dt * 3;
+        o.vx *= 0.92; o.vy *= 0.92;
+      } else {
+        o.vy += 380 * dt;       // gravity arc
+        o.vx *= 0.96;
+        if (o.vy > 0 && o.y >= o.sprite.getData("restY")) { o.vy = 0; o.vx = 0; }
+      }
+      o.x += o.vx * dt; o.y += o.vy * dt;
+      o.sprite.setPosition(o.x, o.y);
+      o.glow.setPosition(o.x, o.y);
+      const bob = Math.sin(this.time.now / 120 + o.x) * 1.5;
+      o.sprite.y += bob;
+      // blink when about to expire
+      if (o.life < 3) o.sprite.setAlpha(Math.abs(Math.sin(this.time.now / 90)) * 0.8 + 0.2);
+      // collect
+      if (d < 26 && !this.avatar.dead) {
+        this.collectOrb(o);
+        o.life = 0;
+      }
+      if (o.life <= 0) { o.sprite.destroy(); o.glow.destroy(); }
+    }
+    this.lootOrbs = this.lootOrbs.filter((o) => o.life > 0);
+  }
+
+  private collectOrb(o: LootOrb) {
+    const v = Math.max(1, Math.round(o.value));
+    if (o.kind === "p") this.plt.p += v; else this.plt.l += v;
+    this.floatText(this.avatar.x, this.avatar.y - 40, `+${v}${o.kind === "p" ? "P" : "L"}`, o.kind === "p" ? "#ffc24d" : "#ff5ad1");
+    this.burst(o.x, o.y, o.kind === "p" ? 0xffc24d : 0xff5ad1, 6);
+    sfx.coin();
+  }
+
+  // ═══════════════════════════ FEEL :: DASH ═══════════════════════════
+  private tryDash() {
+    if (this.dashCd > 0 || this.avatar.dead || this.dashT > 0) return;
+    // dash in current movement or facing direction
+    let dx = this.dashDir.x, dy = this.dashDir.y;
+    if (dx === 0 && dy === 0) { dx = this.playerFacing; dy = 0; }
+    const len = Math.hypot(dx, dy) || 1;
+    this.dashDir = { x: dx / len, y: dy / len };
+    this.dashT = 0.18;
+    this.dashCd = 1.1;
+    this.avatar.invuln = Math.max(this.avatar.invuln, 0.25);
+    sfx.dash();
+    // zoom punch — updateCamera eases it back to this.zoom
+    this.cameras.main.zoom = Math.min(1.5, this.cameras.main.zoom * 1.07);
+  }
+
+  private updateDash(dt: number) {
+    this.dashCd = Math.max(0, this.dashCd - dt);
+    if (this.dashT > 0) {
+      this.dashT -= dt;
+      const sp = 560;
+      this.tryMove(this.avatar, this.dashDir.x * sp * dt, this.dashDir.y * sp * dt);
+      this.playerFacing = this.dashDir.x >= 0 ? 1 : -1;
+      this.player.setFlipX(this.playerFacing < 0);
+      // afterimage trail
+      this.trailGhostT -= dt;
+      if (this.trailGhostT <= 0) {
+        this.trailGhostT = 0.03;
+        this.spawnTrailGhost();
+      }
+    }
+  }
+
+  private spawnTrailGhost() {
+    const g = this.add.image(this.avatar.x, this.avatar.y, "player").setOrigin(0.5, 1)
+      .setDepth(23).setTint(0x3af5ff).setAlpha(0.5).setFlipX(this.playerFacing < 0);
+    this.tweens.add({ targets: g, alpha: 0, scaleX: 1.25, scaleY: 1.25, duration: 320, ease: "Cubic.easeOut", onComplete: () => g.destroy() });
+  }
+
+  // ═══════════════════════════ FEEL :: WEATHER ════════════════════════
+  private updateWeather(dt: number) {
+    const cam = this.cameras.main;
+    const spawnRate: Record<RegionId, number> = {
+      genesis: 2, forge: 14, syndicate: 16, nomad: 12, hollows: 8, sanctum: 10,
+    };
+    const target = spawnRate[this.region];
+    // spawn
+    if (this.weather.length < target && Math.random() < dt * target * 2) {
+      const wx = cam.scrollX + Math.random() * cam.width / cam.zoom;
+      const wy = cam.scrollY + Math.random() * cam.height / cam.zoom;
+      let tex = "spark", tint = 0x3af5ff, vx = 0, vy = 0, scale = 0.5, life = 3;
+      switch (this.region) {
+        case "forge": tex = "ember"; tint = 0xff8b3e; vx = Phaser.Math.FloatBetween(-10, 10); vy = Phaser.Math.FloatBetween(-70, -30); scale = Phaser.Math.FloatBetween(0.4, 0.9); break;
+        case "syndicate": tex = "rain"; tint = 0x9fdcff; vx = -40; vy = 480; scale = 1; life = 1.4; break;
+        case "nomad": tex = "sand"; tint = 0xd8b878; vx = Phaser.Math.FloatBetween(60, 130); vy = Phaser.Math.FloatBetween(10, 30); scale = Phaser.Math.FloatBetween(0.3, 0.7); break;
+        case "hollows": tex = "spore"; tint = 0x6bff9e; vx = Phaser.Math.FloatBetween(-15, 15); vy = Phaser.Math.FloatBetween(-25, -8); scale = Phaser.Math.FloatBetween(0.4, 0.8); break;
+        case "sanctum": tex = "spore"; tint = 0xb58cff; vx = Phaser.Math.FloatBetween(-12, 12); vy = Phaser.Math.FloatBetween(-30, -10); scale = Phaser.Math.FloatBetween(0.4, 0.9); break;
+        default: tex = "spark"; tint = 0x3af5ff; vx = Phaser.Math.FloatBetween(-8, 8); vy = Phaser.Math.FloatBetween(-12, -4); scale = 0.4; break;
+      }
+      const sprite = this.add.image(wx, wy, tex).setDepth(1250).setTint(tint).setScale(scale)
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.8);
+      this.weather.push({ sprite, x: wx, y: wy, vx, vy, life });
+    }
+    for (const w of this.weather) {
+      w.life -= dt;
+      w.x += w.vx * dt; w.y += w.vy * dt;
+      w.sprite.setPosition(w.x, w.y);
+      if (w.life <= 0) w.sprite.destroy();
+    }
+    this.weather = this.weather.filter((w) => w.life > 0);
+  }
+
+  // ═══════════════════════════ FEEL :: HITSTOP & JUICE ════════════════
+  private hitstop(sec: number) { this.hitstopT = Math.max(this.hitstopT, sec); }
+
+  private bigBurst(x: number, y: number, color: number, count: number) {
+    this.burst(x, y, color, count);
+    // expanding shockwave ring
+    const ring = this.add.image(x, y, "selring").setDepth(997).setTint(color).setAlpha(0.9).setScale(0.3);
+    this.tweens.add({ targets: ring, scale: 2.4, alpha: 0, duration: 380, ease: "Cubic.easeOut", onComplete: () => ring.destroy() });
   }
 
   private jumpAvatar() {

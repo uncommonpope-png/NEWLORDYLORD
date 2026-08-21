@@ -430,6 +430,21 @@ export function createTextures(scene: Phaser.Scene) {
     g.fillStyle(0x0a0f1e, 1); g.fillCircle(10, 10, 1.8); g.fillCircle(16, 10, 1.8);
   });
 
+  // ── FEEL layer :: loot & weather ────────────────────
+  make("coin", 16, 16, (g) => {
+    g.fillStyle(0xffffff, 1); g.fillCircle(8, 8, 7);
+    g.fillStyle(0xfff4c8, 1); g.fillCircle(8, 8, 5.5);
+    g.fillStyle(0xffc24d, 1); g.fillCircle(8, 8, 3.2);
+    g.fillStyle(0xffffff, 0.9); g.fillCircle(6.5, 6.5, 1.4);
+  });
+  make("ember", 6, 6, (g) => { g.fillStyle(0xffffff, 1); g.fillCircle(3, 3, 2.6); });
+  make("rain", 2, 14, (g) => { g.fillStyle(0xffffff, 0.9); g.fillRect(0, 0, 1.6, 14); });
+  make("sand", 5, 5, (g) => { g.fillStyle(0xffffff, 0.8); g.fillCircle(2.5, 2.5, 2); });
+  make("spore", 7, 7, (g) => {
+    g.fillStyle(0xffffff, 0.7); g.fillCircle(3.5, 3.5, 2.2);
+    g.fillStyle(0xffffff, 0.35); g.fillCircle(3.5, 3.5, 3.4);
+  });
+
   make("scaffold", 70, 80, (g) => {
     g.lineStyle(2, 0xffc24d, 0.7);
     g.strokePoints([P(35, 6), P(64, 22), P(35, 38), P(6, 22)], true);

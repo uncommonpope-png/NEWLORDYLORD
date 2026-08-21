@@ -420,7 +420,7 @@ export function MobileControls() {
       <div className="grid grid-cols-2 gap-3 pointer-events-auto">
         <ActBtn label="B" sub="BATTLE" color="#ff4d5e" onDown={() => bridge.command("rallyAll", {})} />
         <ActBtn label="C" sub="CATCH" color="#b58cff" onDown={() => bridge.command("catch", {})} />
-        <ActBtn label="⇧" sub="SPRINT" color="#ffc24d" onDown={() => bridge.command("sprint", true)} onUp={() => bridge.command("sprint", false)} />
+        <ActBtn label="»" sub="DASH" color="#ffc24d" onDown={() => bridge.command("dash", {})} />
         <ActBtn label="⤒" sub="JUMP" color="#3af5ff" onDown={() => bridge.command("jump", {})} />
       </div>
     </div>

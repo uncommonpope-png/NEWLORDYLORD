@@ -142,7 +142,9 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
               <CtrlRow keys={["V", "`"]} desc="3D command center / GSK shell" />
               <CtrlRow keys={["E"]} desc="market terminal / soul home / handshake" />
               <CtrlRow keys={["C"]} desc="catch a weakened wild creature (15 L)" />
-              <CtrlRow keys={["SPACE", "SHIFT"]} desc="jump / sprint" />
+              <CtrlRow keys={["SHIFT"]} desc="dash — burst speed, afterimages, brief invulnerability" />
+              <CtrlRow keys={["SPACE"]} desc="jump" />
+              <CtrlRow keys={["LOOT"]} desc="kills drop glowing orbs — run over them to collect PLT" />
               <CtrlRow keys={["P", "I", "O", "L"]} desc="dashboard / creatures / factions / tower" />
               <CtrlRow keys={["ESC", "SCROLL", "M"]} desc="pause / zoom / mute" />
             </div>

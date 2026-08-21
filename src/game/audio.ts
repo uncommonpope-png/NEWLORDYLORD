@@ -103,6 +103,9 @@ class SoulAudio {
   }
   coin() { this.tone("square", 1180, 1560, 0.07, 0.09); this.tone("square", 1560, 2100, 0.09, 0.07, 0.05); }
   heal() { this.tone("sine", 660, 990, 0.14, 0.09); this.tone("sine", 880, 1320, 0.12, 0.07, 0.06); }
+  dash() { this.noise(0.14, 0.12, 2400); this.tone("sine", 300, 900, 0.13, 0.1, 0, "lin"); }
+  crit() { this.tone("square", 220, 110, 0.16, 0.2); this.noise(0.1, 0.14, 3200); this.tone("square", 440, 220, 0.1, 0.12, 0.04); }
+  loot() { this.tone("sine", 880, 1320, 0.08, 0.08); this.tone("sine", 1320, 1760, 0.07, 0.06, 0.05); }
   region() { [392, 494, 587, 784].forEach((f, i) => this.tone("triangle", f, f, 0.22, 0.09, i * 0.08)); }
   catch() { [523, 659, 784, 1047].forEach((f, i) => this.tone("square", f, f * 1.02, 0.12, 0.1, i * 0.06)); this.noise(0.1, 0.05, 6000, 0.4); }
   evolve() { [262, 330, 392, 523, 659, 784, 1047].forEach((f, i) => this.tone("sawtooth", f, f * 1.05, 0.16, 0.08, i * 0.07)); }

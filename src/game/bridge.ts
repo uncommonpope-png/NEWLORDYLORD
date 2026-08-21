@@ -439,6 +439,7 @@ export type BridgeCommands = {
   catch: {};
   joy: { x: number; y: number };
   sprint: boolean;
+  dash: {};
   jump: {};
   towerAscend: {};
   towerReset: {};
