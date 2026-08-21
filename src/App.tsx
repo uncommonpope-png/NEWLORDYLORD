@@ -3,6 +3,7 @@ import { mountGame } from "./game/main";
 import { bridge, BridgeCommands, PltSnapshot, EndStats, HouseId, UnitId, WeaponId, StructId, fmt } from "./game/bridge";
 import { sfx } from "./game/audio";
 import { TopBar, PromptBar, LogPanel, Hotbar, WarPanel, SelectionPanel, WaveBanner, Minimap, CommandCard, LogEntry } from "./components/HUD";
+import { DashboardPanel, CreaturesPanel, FactionsPanel, TowerPanel, SoulHomePanel, LiveTicker, MobileControls, PanelId } from "./components/Panels";
 import { BootScreen, HouseSelect, MarketTerminal, PauseScreen, EndScreen } from "./components/Overlays";
 import { TerminalShell } from "./components/TerminalShell";
 import { mountCommandCenter } from "./game/CommandCenter";
@@ -25,6 +26,8 @@ export default function App() {
   const [muted, setMuted] = useState(false);
   const [view, setView] = useState<View>("arena");
   const [shellOpen, setShellOpen] = useState(false);
+  const [panel, setPanel] = useState<PanelId>(null);
+  const [homeOpen, setHomeOpen] = useState(false);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const ccMountRef = useRef<HTMLDivElement>(null);
   const ccHandleRef = useRef<CC3DHandle | null>(null);
@@ -46,6 +49,7 @@ export default function App() {
       bridge.on("prompt", (p) => setPrompt(p)),
       bridge.on("flash", (f) => setFlash({ ...f, key: Date.now() })),
       bridge.on("terminal", (open) => setTerminalOpen(open)),
+      bridge.on("home", (open) => { setHomeOpen(open); if (open) sfx.blip(); }),
       bridge.on("paused", (p) => setPaused(p)),
       bridge.on("started", () => setScreen((s) => (s === "boot" ? s : "game"))),
       bridge.on("wave", (w) => setWave(w.n)),

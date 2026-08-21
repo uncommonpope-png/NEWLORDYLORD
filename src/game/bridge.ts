@@ -188,8 +188,24 @@ export const STRUCT_DEFS: Record<StructId, StructDef> = {
     color: "#f5f0ff", desc: "Summons Patch Priests and Kernel Titans.", unlocks: ["priest", "titan"], footprint: 2,
   },
   turret: {
-    id: "turret", name: "Defense Turret", cost: { p: 100, l: 0, t: 30 }, hp: 300, supply: 0, buildTime: 10,
+    id: "turret", name: "Defense Turret", cost: { p: 100, l: 0, t: 30 }, hp: 300, supply: 0, buildTime: 12,
     color: "#9fdcff", desc: "Auto-fires on bugs in range. Max 6.", unlocks: [], footprint: 1,
+  },
+  rig: {
+    id: "rig", name: "Harvest Rig", cost: { p: 240, l: 0, t: 20 }, hp: 420, supply: 0, buildTime: 18,
+    color: "#3af5ff", desc: "Drills Data Crystals beside it. +3.5 Profit/s. Build on a crystal.", unlocks: [], footprint: 1, needsNode: true, yields: { p: 3.5, l: 0, t: 0.4 },
+  },
+  grove: {
+    id: "grove", name: "Heart Grove", cost: { p: 0, l: 240, t: 20 }, hp: 420, supply: 0, buildTime: 18,
+    color: "#ff5ad1", desc: "Cultivates Heart Blooms beside it. +3.5 Love/s. Build on a bloom.", unlocks: [], footprint: 1, needsNode: true, yields: { p: 0, l: 3.5, t: 0.4 },
+  },
+  vault: {
+    id: "vault", name: "API Vault", cost: { p: 400, l: 0, t: 60 }, hp: 700, supply: 0, buildTime: 26,
+    color: "#ffc24d", desc: "+7 Profit/s of pure yield — but pirates and bugs covet its keys.", unlocks: [], footprint: 2, yields: { p: 7, l: 0, t: 1 }, attractsRaids: true,
+  },
+  garrison: {
+    id: "garrison", name: "Fortress Garrison", cost: { p: 360, l: 60, t: 80 }, hp: 900, supply: 4, buildTime: 28,
+    color: "#5ea8ff", desc: "+4 supply and a bastion wall. Your frontier command post.", unlocks: [], footprint: 2,
   },
 };
 
@@ -221,6 +237,119 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
 
 export const TURRET_COST = { p: 120, l: 0, t: 40 };
 export const TURRET_MAX = 6;
+
+// ── OPEN WORLD :: 6 REGIONS ──────────────────────────────────────────
+export type RegionId = "genesis" | "forge" | "syndicate" | "hollows" | "nomad" | "sanctum";
+
+export interface RegionDef {
+  id: RegionId; name: string; lv: [number, number]; color: string; desc: string; faction: FactionId;
+}
+
+export const REGION_DEFS: Record<RegionId, RegionDef> = {
+  genesis:   { id: "genesis",   name: "GENESIS CAPITAL", lv: [1, 10],   color: "#3af5ff", desc: "The fortified capital. Market hums, barriers glow.", faction: "syndicate" },
+  forge:     { id: "forge",     name: "FORGE LANDS",     lv: [5, 20],   color: "#ffc24d", desc: "Sparks rain on iron fields. The Forge faction toils here.", faction: "forge" },
+  syndicate: { id: "syndicate", name: "SYNDICATE STRIP", lv: [15, 35],  color: "#ff3ec8", desc: "Neon bazaars and data dens. Everything has a price.", faction: "syndicate" },
+  hollows:   { id: "hollows",   name: "DEBUGGER HOLLOWS",lv: [25, 55],  color: "#6bff9e", desc: "Mist-shrouded ravines where wild code breeds.", faction: "debuggers" },
+  nomad:     { id: "nomad",     name: "NOMAD EXPANSE",   lv: [40, 75],  color: "#ff8b3e", desc: "Endless dunes of static. Caravans trade in silence.", faction: "nomads" },
+  sanctum:   { id: "sanctum",   name: "SOUL SANCTUM",    lv: [70, 100], color: "#b58cff", desc: "The deep frontier. Citadels brood; only legends return.", faction: "ascended" },
+};
+
+// ── FACTION SYSTEM :: 6 FACTIONS ─────────────────────────────────────
+export type FactionId = "forge" | "syndicate" | "debuggers" | "nomads" | "rogue" | "ascended";
+
+export interface FactionDef {
+  id: FactionId; name: string; color: string; perk: string; sigil: string;
+}
+
+export const FACTION_DEFS: Record<FactionId, FactionDef> = {
+  forge:     { id: "forge",     name: "The Forge",        color: "#ffc24d", perk: "Construction costs −15%", sigil: "anvil" },
+  syndicate: { id: "syndicate", name: "Code Syndicate",   color: "#ff3ec8", perk: "PLT income +12%", sigil: "circuit" },
+  debuggers: { id: "debuggers", name: "The Debuggers",    color: "#6bff9e", perk: "Damage vs bugs +20%", sigil: "bugslash" },
+  nomads:    { id: "nomads",    name: "Desert Nomads",    color: "#ff8b3e", perk: "Harvest yield +30%", sigil: "dune" },
+  rogue:     { id: "rogue",     name: "Rogue AI",         color: "#9fdcff", perk: "Unit speed +12%", sigil: "eye" },
+  ascended:  { id: "ascended",  name: "The Ascended",     color: "#b58cff", perk: "Catch rate +15%", sigil: "halo" },
+};
+
+export const FACTION_TIERS = [
+  { name: "NEUTRAL", at: 0 },
+  { name: "FRIENDLY", at: 100 },
+  { name: "HONORED", at: 250 },
+  { name: "EXALTED", at: 500 },
+];
+
+export const factionTier = (rep: number) => {
+  let t = FACTION_TIERS[0];
+  for (const tier of FACTION_TIERS) if (rep >= tier.at) t = tier;
+  return t.name;
+};
+
+// ── CREATURE COLLECTION :: 18 SPECIES ────────────────────────────────
+export type CritterShape = "blob" | "quad" | "wing" | "snake" | "rock" | "wisp";
+
+export interface SpeciesDef {
+  id: string; name: string; shape: CritterShape; color: string; rarity: number; // 1..5
+  baseHp: number; baseAtk: number; evolveTo: string | null; evolveLevel: number;
+  biome: RegionId[]; desc: string;
+}
+
+export const SPECIES: SpeciesDef[] = [
+  { id: "bitling",    name: "Bitling",      shape: "blob",  color: "#6bff9e", rarity: 1, baseHp: 26, baseAtk: 4,  evolveTo: "nibbler",     evolveLevel: 8,  biome: ["genesis", "hollows"], desc: "A stray bit given appetite." },
+  { id: "nibbler",    name: "Nibbler",      shape: "blob",  color: "#3ad47f", rarity: 2, baseHp: 58, baseAtk: 8,  evolveTo: "bytefang",    evolveLevel: 18, biome: ["hollows"], desc: "Nibbles firewalls for fun." },
+  { id: "bytefang",   name: "Bytefang",     shape: "quad",  color: "#1fae62", rarity: 3, baseHp: 130, baseAtk: 17, evolveTo: null, evolveLevel: 99, biome: ["hollows", "nomad"], desc: "Apex packet predator." },
+  { id: "sparkit",    name: "Sparkit",      shape: "quad",  color: "#ffd977", rarity: 1, baseHp: 22, baseAtk: 5,  evolveTo: "voltcat",     evolveLevel: 10, biome: ["genesis", "forge"], desc: "Purrs at 60Hz." },
+  { id: "voltcat",    name: "Voltcat",      shape: "quad",  color: "#ffc24d", rarity: 2, baseHp: 52, baseAtk: 10, evolveTo: "stormlynx",   evolveLevel: 22, biome: ["forge"], desc: "Its tail grounds the enemy." },
+  { id: "stormlynx",  name: "Stormlynx",    shape: "quad",  color: "#ff9d2e", rarity: 4, baseHp: 120, baseAtk: 22, evolveTo: null, evolveLevel: 99, biome: ["forge", "nomad"], desc: "Thunder rolls where it walks." },
+  { id: "mospuff",    name: "Mospuff",      shape: "blob",  color: "#b8e6a0", rarity: 1, baseHp: 34, baseAtk: 3,  evolveTo: "shroomcap",   evolveLevel: 9,  biome: ["genesis", "hollows"], desc: "Soft, damp, mildly sentient." },
+  { id: "shroomcap",  name: "Shroomcap",    shape: "blob",  color: "#e08f6b", rarity: 2, baseHp: 74, baseAtk: 7,  evolveTo: "mycelord",    evolveLevel: 20, biome: ["hollows"], desc: "Spores of mild disruption." },
+  { id: "mycelord",   name: "Mycelord",     shape: "rock",  color: "#c96f9e", rarity: 4, baseHp: 160, baseAtk: 19, evolveTo: null, evolveLevel: 99, biome: ["hollows", "sanctum"], desc: "The forest floor obeys it." },
+  { id: "glim",       name: "Glim",         shape: "wisp",  color: "#9fdcff", rarity: 1, baseHp: 18, baseAtk: 6,  evolveTo: "lanternwisp", evolveLevel: 12, biome: ["genesis", "syndicate"], desc: "A lost cursor of light." },
+  { id: "lanternwisp",name: "Lanternwisp",  shape: "wisp",  color: "#5ec8ff", rarity: 2, baseHp: 44, baseAtk: 12, evolveTo: "beaconflare", evolveLevel: 24, biome: ["syndicate"], desc: "Guides travelers; bills them." },
+  { id: "beaconflare",name: "Beaconflare",  shape: "wisp",  color: "#3af5ff", rarity: 4, baseHp: 96, baseAtk: 26, evolveTo: null, evolveLevel: 99, biome: ["syndicate", "sanctum"], desc: "Visible from three biomes away." },
+  { id: "pebblix",    name: "Pebblix",      shape: "rock",  color: "#9aa7bd", rarity: 1, baseHp: 46, baseAtk: 4,  evolveTo: "bouldron",    evolveLevel: 14, biome: ["forge", "nomad"], desc: "Patient as a compile queue." },
+  { id: "bouldron",   name: "Bouldron",     shape: "rock",  color: "#7e8ba3", rarity: 3, baseHp: 110, baseAtk: 12, evolveTo: "terragolem",  evolveLevel: 28, biome: ["nomad"], desc: "Carries its own collision mesh." },
+  { id: "terragolem", name: "Terragolem",   shape: "rock",  color: "#5f6f8c", rarity: 5, baseHp: 240, baseAtk: 24, evolveTo: null, evolveLevel: 99, biome: ["nomad", "sanctum"], desc: "Older than the grid itself." },
+  { id: "hexling",    name: "Hexling",      shape: "snake", color: "#ff8bd0", rarity: 2, baseHp: 30, baseAtk: 8,  evolveTo: "cipherfox",   evolveLevel: 16, biome: ["syndicate", "hollows"], desc: "Casts minor curses (debuffs)." },
+  { id: "cipherfox",  name: "Cipherfox",    shape: "snake", color: "#ff5ad1", rarity: 3, baseHp: 84, baseAtk: 15, evolveTo: "enigma",      evolveLevel: 32, biome: ["sanctum"], desc: "Its tail is an encrypted stream." },
+  { id: "enigma",     name: "Enigma",       shape: "snake", color: "#b58cff", rarity: 5, baseHp: 190, baseAtk: 30, evolveTo: null, evolveLevel: 99, biome: ["sanctum"], desc: "Solved once. Never again." },
+];
+
+export const speciesById = (id: string) => SPECIES.find((s) => s.id === id)!;
+
+export interface OwnedCreature {
+  uid: number; speciesId: string; level: number; xp: number;
+}
+
+export const creatureStats = (c: OwnedCreature) => {
+  const s = speciesById(c.speciesId);
+  const m = 1 + (c.level - 1) * 0.09;
+  return { hp: Math.round(s.baseHp * m), atk: Math.round(s.baseAtk * m), def: s };
+};
+
+export const xpForLevel = (lv: number) => lv * 40 + lv * lv * 4;
+
+// ── ARCADE LADDER :: 8 TIERS ─────────────────────────────────────────
+export const TOWER_TIERS = ["CLAY", "IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "SOUL"];
+export const TOWER_FLOORS = 10;
+export const TOWER_TIER_COLORS: Record<string, string> = {
+  CLAY: "#b5714f", IRON: "#9aa7bd", BRONZE: "#d08a4e", SILVER: "#cfd8e6",
+  GOLD: "#ffc24d", PLATINUM: "#9fdcff", DIAMOND: "#3af5ff", SOUL: "#b58cff",
+};
+export const towerFloorPower = (tier: number, floor: number) => 40 + tier * 90 + floor * 14 + (floor === TOWER_FLOORS ? 120 : 0);
+
+// ── SOUL HOMES :: garden, storage, upgrades ──────────────────────────
+export const HOME_MAX_LEVEL = 3;
+export const homeUpgradeCost = (lv: number) => ({ p: 200 * lv, l: 80 * lv, t: 30 * lv });
+export const homeGardenPlots = (lv: number) => lv * 2;
+
+export interface GardenPlot { seed: string | null; plantedAt: number; watered: boolean; ready: boolean; }
+export interface ItemDef { id: string; name: string; color: string; value: number; }
+
+export const SEEDS: Record<string, { name: string; cost: number; growSec: number; item: ItemDef }> = {
+  dataseed:  { name: "Data Seed",    cost: 30, growSec: 45, item: { id: "datafruit",  name: "Data Fruit",    color: "#3af5ff", value: 55 } },
+  lovespore: { name: "Love Spore",   cost: 30, growSec: 60, item: { id: "lovebloom",  name: "Love Bloom",    color: "#ff5ad1", value: 70 } },
+  taxroot:   { name: "Tax Root",     cost: 20, growSec: 90, item: { id: "entropygem", name: "Entropy Gem",   color: "#ff4d5e", value: 110 } },
+  soulberry: { name: "Soul Berry",   cost: 60, growSec: 120, item: { id: "soulberry",  name: "Soul Berry",    color: "#b58cff", value: 160 } },
+};
 
 // ── economy / law ────────────────────────────────────────────────────
 export const START_PLT = { p: 320, l: 140, t: 40 };
@@ -272,6 +401,20 @@ export interface PltSnapshot {
   nodesMini: { x: number; y: number; kind: string }[];
   citadelsDown: number;
   citadelsTotal: number;
+  // ── RPG layer ──
+  region: RegionId;
+  playerLevel: number; playerXp: number; xpNext: number;
+  party: { uid: number; speciesId: string; name: string; level: number; color: string; shape: CritterShape }[];
+  partyMax: number;
+  storageCreatures: number;
+  factions: { id: FactionId; rep: number; tier: string }[];
+  tower: { tier: number; floor: number; totalCleared: number };
+  armyPower: number;
+  catchable: { name: string; level: number; hpPct: number } | null;
+  nearHome: boolean;
+  dayPhase: "day" | "dusk" | "night" | "dawn";
+  crittersWild: number;
+  capturedTotal: number;
 }
 
 export type BridgeCommands = {
@@ -292,6 +435,14 @@ export type BridgeCommands = {
   sandbox: {};
   terminal: boolean;
   mute: boolean;
+  // ── RPG layer ──
+  catch: {};
+  joy: { x: number; y: number };
+  sprint: boolean;
+  jump: {};
+  towerAscend: {};
+  towerReset: {};
+  grantReward: { p?: number; l?: number; xp?: number; rep?: { id: FactionId; amt: number } };
 };
 
 export type BridgeEvents = {
@@ -300,11 +451,13 @@ export type BridgeEvents = {
   prompt: string | null;
   flash: { color: string };
   terminal: boolean;
+  home: boolean;
   paused: boolean;
   started: boolean;
   end: EndStats;
   wave: { n: number };
   activity: { kind: string };
+  ticker: { t: string; msg: string; tone: string };
 };
 
 export interface EndStats {

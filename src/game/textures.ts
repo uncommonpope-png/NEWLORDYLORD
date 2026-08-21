@@ -292,6 +292,51 @@ export function createTextures(scene: Phaser.Scene) {
   });
 
   // ── buildable structures ────────────────────────
+  // ── wild creature shapes (tinted per species) ─────────────────────
+  make("critter_blob", 30, 26, (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(15, 15, 10);
+    g.fillStyle(0x0a0f1e, 1); g.fillCircle(11, 13, 2.2); g.fillCircle(19, 13, 2.2);
+    g.fillStyle(0xffffff, 0.85); g.fillCircle(15, 19, 2.4);
+  });
+  make("critter_quad", 34, 26, (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillEllipse(17, 16, 22, 13);
+    g.fillCircle(27, 9, 6);
+    g.fillTriangle(23, 4, 26, -1, 28, 5);
+    g.fillTriangle(28, 5, 31, -1, 32, 6);
+    g.fillStyle(0x0a0f1e, 1); g.fillCircle(28, 8, 1.8);
+    g.fillStyle(0xffffff, 1); g.fillRect(9, 21, 3, 5); g.fillRect(20, 21, 3, 5);
+  });
+  make("critter_wing", 34, 28, (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillEllipse(17, 16, 12, 16);
+    g.fillTriangle(11, 12, -1, 4, 9, 20);
+    g.fillTriangle(23, 12, 35, 4, 25, 20);
+    g.fillStyle(0x0a0f1e, 1); g.fillCircle(14, 12, 2); g.fillCircle(20, 12, 2);
+  });
+  make("critter_snake", 36, 22, (g) => {
+    g.lineStyle(6, 0xffffff, 1);
+    g.beginPath();
+    for (let i = 0; i <= 20; i++) { const x = 4 + i * 1.4; const y = 12 + Math.sin(i / 3) * 5; if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); }
+    g.strokePath();
+    g.fillStyle(0xffffff, 1); g.fillCircle(32, 10, 5);
+    g.fillStyle(0x0a0f1e, 1); g.fillCircle(33, 9, 1.6);
+  });
+  make("critter_rock", 32, 28, (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillPoints([P(16, 2), P(28, 10), P(26, 24), P(6, 24), P(4, 10)], true);
+    g.fillStyle(0x0a0f1e, 0.35); g.fillPoints([P(16, 8), P(23, 13), P(16, 20), P(9, 13)], true);
+    g.fillStyle(0x0a0f1e, 1); g.fillCircle(12, 13, 2); g.fillCircle(20, 13, 2);
+  });
+  make("critter_wisp", 26, 30, (g) => {
+    g.fillStyle(0xffffff, 0.9); g.fillCircle(13, 11, 8);
+    g.fillStyle(0xffffff, 0.5);
+    g.fillTriangle(8, 16, 13, 30, 13, 17);
+    g.fillTriangle(13, 17, 15, 28, 18, 16);
+    g.fillStyle(0x0a0f1e, 1); g.fillCircle(10, 10, 1.8); g.fillCircle(16, 10, 1.8);
+  });
+
   make("scaffold", 70, 80, (g) => {
     g.lineStyle(2, 0xffc24d, 0.7);
     g.strokePoints([P(35, 6), P(64, 22), P(35, 38), P(6, 22)], true);

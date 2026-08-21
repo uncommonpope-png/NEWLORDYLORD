@@ -9,7 +9,10 @@ import {
   HOUSE_DEFS, UNIT_DEFS, WEAPON_DEFS, TURRET_COST, TURRET_MAX, STRUCT_DEFS,
   SUPPLY_START, SUPPLY_CAP,
   START_PLT, START_INTEGRITY, EXCHANGE, OBJECTIVE, fmt,
+  REGION_DEFS, FACTION_DEFS, SPECIES, speciesById, creatureStats, xpForLevel,
+  TOWER_TIERS, TOWER_FLOORS, towerFloorPower, factionTier,
   bridge, HouseId, UnitId, WeaponId, StructId, PltSnapshot, EndStats,
+  RegionId, FactionId, OwnedCreature, CritterShape,
 } from "./bridge";
 import { createTextures } from "./textures";
 import { sfx } from "./audio";
@@ -86,7 +89,7 @@ interface ResNode {
 
 interface Building {
   id: number;
-  kind: "house" | "turret" | "citadel" | "market" | "supply" | "barracks" | "foundry" | "heavy" | "sanctum" | "relay";
+  kind: "house" | "turret" | "citadel" | "market" | "supply" | "barracks" | "foundry" | "heavy" | "sanctum" | "relay" | "rig" | "grove" | "vault" | "garrison";
   owner: "player" | "cpu" | "neutral";
   houseType?: HouseId;
   c: number; r: number;
@@ -125,6 +128,30 @@ interface Projectile {
 }
 
 interface Blast { x: number; y: number; t: number; r: number; dmg: number; hit: Set<number>; }
+
+// ── RPG :: creatures & soul homes ────────────────────────────────────
+interface Critter {
+  id: number;
+  speciesId: string;
+  level: number;
+  hp: number; hpMax: number;
+  x: number; y: number;
+  region: RegionId;
+  sprite: Phaser.GameObjects.Image;
+  bar: Phaser.GameObjects.Graphics;
+  wanderT: number; wx: number; wy: number;
+  fleeing: boolean;
+  dead: boolean;
+  bobSeed: number;
+}
+
+interface SoulHome {
+  level: number;
+  garden: GardenPlotState[];
+  storage: { id: string; name: string; color: string; value: number }[];
+}
+
+interface GardenPlotState { seed: string | null; plantedAt: number; watered: boolean; ready: boolean; }
 
 export class GameScene extends Phaser.Scene {
   // world
@@ -209,6 +236,29 @@ export class GameScene extends Phaser.Scene {
   private ghostValid = false;
   private gameSpeed = 1;
 
+  // ── RPG layer ──────────────────────────────────────────────────────
+  private region: RegionId = "genesis";
+  private regionName: Phaser.GameObjects.Text | null = null;
+  private playerLevel = 1;
+  private playerXp = 0;
+  private party: OwnedCreature[] = [];
+  private storageCreatures: OwnedCreature[] = [];
+  private nextCreatureUid = 1;
+  private capturedTotal = 0;
+  private partySprites: { uid: number; sprite: Phaser.GameObjects.Image; fighter: Fighter | null }[] = [];
+  private factionRep: Record<FactionId, number> = { forge: 0, syndicate: 0, debuggers: 0, nomads: 0, rogue: 0, ascended: 0 };
+  private towerTier = 0;
+  private towerFloor = 1;
+  private towerCleared = 0;
+  private critters: Critter[] = [];
+  private critterTimer = 3;
+  private dayClock = 0;
+  private soulHomes: Record<number, SoulHome> = {};
+  private ticker: { t: string; msg: string; tone: string }[] = [];
+  private joyVec = { x: 0, y: 0 };
+  private sprinting = false;
+  private catchableCritter: Critter | null = null;
+
   private unsub: (() => void)[] = [];
 
   constructor() { super("GameScene"); }
@@ -231,6 +281,18 @@ export class GameScene extends Phaser.Scene {
     this.paused = false; this.ended = false; this.sandbox = false; this.started = false;
     this.handshakeCd = 0; this.respawnTimer = -1; this.npcBubble = null;
     this.placeArmed = null; this.ghost = null; this.ghostValid = false; this.gameSpeed = 1;
+
+    // RPG layer reset / load
+    this.region = "genesis";
+    this.playerLevel = 1; this.playerXp = 0;
+    this.party = []; this.storageCreatures = []; this.nextCreatureUid = 1; this.capturedTotal = 0;
+    this.partySprites = [];
+    this.factionRep = { forge: 0, syndicate: 0, debuggers: 0, nomads: 0, rogue: 0, ascended: 0 };
+    this.towerTier = 0; this.towerFloor = 1; this.towerCleared = 0;
+    for (const c of this.critters) { c.sprite.destroy(); c.bar.clear(); }
+    this.critters = []; this.critterTimer = 2; this.catchableCritter = null;
+    this.dayClock = 0; this.soulHomes = {}; this.ticker = [];
+    this.joyVec = { x: 0, y: 0 }; this.sprinting = false;
 
     this.buildVoid();
     this.buildGround();
@@ -480,6 +542,8 @@ export class GameScene extends Phaser.Scene {
         this.floatText(f.x, f.y - 44, `+${f.cargo}${f.cargoKind === "p" ? "P" : "L"}`, f.cargoKind === "p" ? "#3af5ff" : "#ff5ad1");
         this.activity("gather");
         sfx.coin();
+        this.addRep("nomads", 4);
+        this.gainXp(3);
         f.cargo = 0;
         f.sprite.clearTint();
         f.gState = "toNode";
@@ -592,6 +656,7 @@ export class GameScene extends Phaser.Scene {
       FIVE: kb.addKey("FIVE"), SIX: kb.addKey("SIX"), SEVEN: kb.addKey("SEVEN"), EIGHT: kb.addKey("EIGHT"),
       NINE: kb.addKey("NINE"), ZERO: kb.addKey("ZERO"),
       R: kb.addKey("R"),
+      C: kb.addKey("C"), SPACE: kb.addKey("SPACE"), SHIFT: kb.addKey("SHIFT"),
     };
 
     this.input.on("pointerdown", (ptr: Phaser.Input.Pointer) => {
@@ -672,6 +737,14 @@ export class GameScene extends Phaser.Scene {
       bridge.onCommand("arm", (d) => this.armWeapon(d.id)),
       bridge.onCommand("buildTurret", () => this.buildTurret()),
       bridge.onCommand("rallyAll", () => this.rallyAll()),
+      // ── RPG layer commands ──
+      bridge.onCommand("catch", () => this.attemptCatch()),
+      bridge.onCommand("jump", () => this.jumpAvatar()),
+      bridge.onCommand("sprint", (on) => { this.sprinting = on; }),
+      bridge.onCommand("joy", (v) => { this.joyVec = { x: v.x, y: v.y }; }),
+      bridge.onCommand("towerAscend", () => this.towerAscend()),
+      bridge.onCommand("towerReset", () => this.towerReset()),
+      bridge.onCommand("grantReward", (r) => this.grantReward(r)),
       bridge.onCommand("place", (d) => this.startPlace(d.id)),
       bridge.onCommand("cancelPlace", () => this.cancelPlace()),
       bridge.onCommand("speed", () => this.cycleSpeed()),
@@ -1336,6 +1409,10 @@ export class GameScene extends Phaser.Scene {
       this.floatText(f.x, f.y - 30, `+${f.loot}P`, "#ffc24d");
       this.burst(f.x, f.y - 12, 0xff4d5e, 10);
       sfx.death();
+      // RPG progression
+      this.gainXp(8 + Math.round(f.loot / 6));
+      this.addRep("debuggers", 6);
+      if (this.kills % 10 === 0) this.addRep("rogue", 8);
     } else if (f.kind === "avatar") {
       this.burst(f.x, f.y - 14, 0x3af5ff, 18);
       sfx.boom();
@@ -1538,6 +1615,14 @@ export class GameScene extends Phaser.Scene {
       this.updateCitadels(dt);
       this.updateEconomy(dt);
       this.tickConstruction(dt);
+      // ── RPG layer ──
+      this.dayClock += dt;
+      this.updateRegion();
+      this.critterTimer -= dt;
+      if (this.critterTimer <= 0) { this.critterTimer = Phaser.Math.FloatBetween(2.5, 5); this.spawnCritter(); }
+      this.weakenCritters();
+      this.updateCritters(dt);
+      this.updateParty(dt);
     }
     this.updatePrompts();
     this.updateCamera(rawDt);
@@ -1595,12 +1680,17 @@ export class GameScene extends Phaser.Scene {
     if (k.S.isDown || k.DOWN.isDown) { dx -= 0.7071; dy += 0.7071; }
     if (k.A.isDown || k.LEFT.isDown) { dx -= 0.7071; dy -= 0.7071; }
     if (k.D.isDown || k.RIGHT.isDown) { dx += 0.7071; dy += 0.7071; }
+    // virtual joystick (mobile) feeds screen-space input
+    if (Math.abs(this.joyVec.x) > 0.12 || Math.abs(this.joyVec.y) > 0.12) {
+      dx += this.joyVec.x * 0.9; dy += this.joyVec.y * 0.9;
+    }
 
     const entropyFactor = this.plt.t > this.plt.p + this.plt.l ? 0.72 : 1;
+    const rogueBonus = this.factionRep.rogue >= 500 ? 1.12 : 1;
     if (dx !== 0 || dy !== 0) {
       this.avatar.order = null; // manual control overrides orders
       const len = Math.hypot(dx, dy);
-      const sp = this.avatar.speed * entropyFactor;
+      const sp = this.avatar.speed * entropyFactor * rogueBonus * (this.sprinting ? 1.55 : 1);
       this.tryMove(this.avatar, (dx / len) * sp * dt, (dy / len) * sp * dt);
       if (dx !== 0) {
         this.playerFacing = dx > 0 ? 1 : -1;
@@ -2092,7 +2182,13 @@ export class GameScene extends Phaser.Scene {
     const dNpc = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, this.npcTarget.x, this.npcTarget.y + 8);
     let prompt: string | null = null;
     if (dTerm < 95) prompt = "E :: OPEN MARKET TERMINAL — PLT REAL ESTATE & SOVEREIGN EXCHANGE";
+    else if (this.nearOwnedHome()) prompt = "E :: ENTER SOUL HOME — garden, storage & upgrades";
     else if (dNpc < 80) prompt = this.handshakeCd > 0 ? `WATCHER-07 :: handshake recharging ${Math.ceil(this.handshakeCd)}s` : "E :: A2A HANDSHAKE — trade Love with the neighbor";
+
+    if (this.catchableCritter && !this.catchableCritter.dead) {
+      const sp = speciesById(this.catchableCritter.speciesId);
+      prompt = `C :: CATCH ${sp.name.toUpperCase()} (Lv.${this.catchableCritter.level}) — costs 15 Love`;
+    }
 
     if (this.armed === "blade") prompt = "THE BLADE :: drag across the field, release to refactor";
     else if (this.armed === "arrow") prompt = "THE ARROW :: click a bug for a surgical strike";
@@ -2105,7 +2201,14 @@ export class GameScene extends Phaser.Scene {
 
     if (!this.terminalOpen && !this.paused && !this.ended && kb.JustDown(this.keys.E) && this.time.now - this.terminalChangedAt > 250) {
       if (dTerm < 100) { sfx.interact(); bridge.emit("terminal", true); }
+      else if (this.nearOwnedHome()) { sfx.interact(); bridge.emit("home", true); }
       else if (dNpc < 82) this.handshake();
+    }
+    // RPG action keys
+    if (this.started && !this.ended && !this.terminalOpen && !this.paused) {
+      if (kb.JustDown(this.keys.C)) this.attemptCatch();
+      if (kb.JustDown(this.keys.SPACE)) this.jumpAvatar();
+      this.sprinting = this.keys.SHIFT.isDown;
     }
     if (kb.JustDown(this.keys.ESC)) {
       if (this.armed) { this.armed = null; }
@@ -2232,6 +2335,29 @@ export class GameScene extends Phaser.Scene {
       citadelsTotal: this.buildings.filter((b) => b.kind === "citadel").length,
       gameSpeed: this.gameSpeed,
       buildArmed: this.placeArmed,
+      // ── RPG layer ──
+      region: this.region,
+      playerLevel: this.playerLevel,
+      playerXp: Math.floor(this.playerXp),
+      xpNext: xpForLevel(this.playerLevel),
+      party: this.party.slice(0, 6).map((c) => ({
+        uid: c.uid, speciesId: c.speciesId, name: speciesById(c.speciesId).name,
+        level: c.level, color: speciesById(c.speciesId).color, shape: speciesById(c.speciesId).shape,
+      })),
+      partyMax: 6,
+      storageCreatures: this.storageCreatures.length,
+      factions: (Object.keys(FACTION_DEFS) as FactionId[]).map((id) => ({
+        id, rep: Math.floor(this.factionRep[id]), tier: factionTier(this.factionRep[id]),
+      })),
+      tower: { tier: this.towerTier, floor: this.towerFloor, totalCleared: this.towerCleared },
+      armyPower: this.armyPower(),
+      catchable: this.catchableCritter && !this.catchableCritter.dead
+        ? { name: speciesById(this.catchableCritter.speciesId).name, level: this.catchableCritter.level, hpPct: this.catchableCritter.hp / this.catchableCritter.hpMax }
+        : null,
+      nearHome: this.nearOwnedHome(),
+      dayPhase: this.dayPhase(),
+      crittersWild: this.critters.filter((c) => !c.dead).length,
+      capturedTotal: this.capturedTotal,
     };
     bridge.emit("plt", snap);
   }
@@ -2251,6 +2377,351 @@ export class GameScene extends Phaser.Scene {
     if (b.kind === "relay") return b.owner === "player" ? "#3af5ff" : "#8f6bff";
     if (b.structId) return STRUCT_DEFS[b.structId].color;
     return "#ffc24d";
+  }
+
+  // ═══════════════════════════ RPG :: REGIONS ═══════════════════════════
+  private regionAt(c: number, r: number): RegionId {
+    const d = Math.sqrt((c - 20) ** 2 + (r - 20) ** 2);
+    if (d < 8) return "genesis";
+    if (d > 24) return "sanctum";
+    const ang = Math.atan2(r - 20, c - 20);
+    if (ang >= -Math.PI / 4 && ang < Math.PI / 4) return "syndicate";      // east
+    if (ang >= Math.PI / 4 && ang < (3 * Math.PI) / 4) return "hollows";    // south
+    if (ang >= -((3 * Math.PI) / 4) && ang < -Math.PI / 4) return "forge";  // north
+    return "nomad";                                                        // west
+  }
+
+  private updateRegion() {
+    const cart = isoToCart(this.avatar.x, this.avatar.y);
+    const reg = this.regionAt(cart.col, cart.row);
+    if (reg !== this.region) {
+      this.region = reg;
+      const def = REGION_DEFS[reg];
+      this.addRep(def.faction, 4);
+      this.log(`ENTERING ${def.name} :: Lv.${def.lv[0]}–${def.lv[1]}`, "sys");
+      this.pushTicker(`crossed into ${def.name}`, "sys");
+      this.showRegionBanner(def.name, def.color, def.lv);
+      sfx.region();
+    }
+  }
+
+  private showRegionBanner(name: string, color: string, lv: [number, number]) {
+    if (this.regionName) this.regionName.destroy();
+    const cam = this.cameras.main;
+    const txt = this.add.text(cam.width / 2, 110, name, {
+      fontFamily: "Silkscreen", fontSize: "30px", color,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1500).setAlpha(0);
+    const sub = this.add.text(cam.width / 2, 148, `LV ${lv[0]} – ${lv[1]} ZONE`, {
+      fontFamily: "IBM Plex Mono", fontSize: "11px", color: "#8fa5d8",
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(1500).setAlpha(0);
+    this.tweens.add({ targets: [txt, sub], alpha: 1, duration: 400, yoyo: true, hold: 1600, onComplete: () => { txt.destroy(); sub.destroy(); } });
+  }
+
+  // ═══════════════════════════ RPG :: CREATURES ═════════════════════════
+  private spawnCritter() {
+    if (this.critters.filter((c) => !c.dead).length >= 12) return;
+    // pick a random walkable wild tile away from the capital
+    for (let tries = 0; tries < 20; tries++) {
+      const c = Phaser.Math.Between(2, GRID - 3), r = Phaser.Math.Between(2, GRID - 3);
+      if (this.solids[r]?.[c]) continue;
+      if (Math.sqrt((c - 20) ** 2 + (r - 20) ** 2) < 9) continue;
+      const reg = this.regionAt(c, r);
+      const pool = SPECIES.filter((s) => s.biome.includes(reg));
+      if (!pool.length) continue;
+      const sp = pool[Phaser.Math.Between(0, pool.length - 1)];
+      const rd = REGION_DEFS[reg];
+      const level = Phaser.Math.Between(rd.lv[0], rd.lv[1]);
+      const hp = Math.round(sp.baseHp * (1 + (level - 1) * 0.12));
+      const pos = cartToIso(c + 0.5, r + 0.5);
+      const sprite = this.add.image(pos.x, pos.y, `critter_${sp.shape}`).setOrigin(0.5, 1)
+        .setDepth(r + c + 0.65).setTint(Phaser.Display.Color.HexStringToColor(sp.color).color);
+      const crit: Critter = {
+        id: this.nextId++, speciesId: sp.id, level, hp, hpMax: hp,
+        x: pos.x, y: pos.y, region: reg, sprite, bar: this.add.graphics().setDepth(998),
+        wanderT: 0, wx: pos.x, wy: pos.y, fleeing: false, dead: false, bobSeed: Math.random() * 100,
+      };
+      this.critters.push(crit);
+      return;
+    }
+  }
+
+  private updateCritters(dt: number) {
+    for (const c of this.critters) {
+      if (c.dead) continue;
+      const fleeFrom = this.nearestPlayerUnit(c.x, c.y, 110);
+      if (c.hp < c.hpMax * 0.35) c.fleeing = true;
+      let vx = 0, vy = 0;
+      if (c.fleeing && fleeFrom) {
+        const d = Phaser.Math.Distance.Between(c.x, c.y, fleeFrom.x, fleeFrom.y) || 1;
+        vx = ((c.x - fleeFrom.x) / d) * 90; vy = ((c.y - fleeFrom.y) / d) * 90;
+      } else {
+        c.wanderT -= dt;
+        if (c.wanderT <= 0) {
+          c.wanderT = Phaser.Math.FloatBetween(1.5, 4);
+          c.wx = c.x + Phaser.Math.Between(-70, 70); c.wy = c.y + Phaser.Math.Between(-50, 50);
+        }
+        const d = Phaser.Math.Distance.Between(c.x, c.y, c.wx, c.wy);
+        if (d > 6) { vx = ((c.wx - c.x) / d) * 34; vy = ((c.wy - c.y) / d) * 34; }
+      }
+      c.x += vx * dt; c.y += vy * dt;
+      const bob = Math.sin(this.time.now / 260 + c.bobSeed) * 2.5;
+      c.sprite.setPosition(c.x, c.y + bob);
+      const cc = isoToCart(c.x, c.y);
+      c.sprite.setDepth(cc.row + cc.col + 0.65);
+      // hp bar
+      c.bar.clear();
+      if (c.hp < c.hpMax) {
+        const w = 30;
+        c.bar.fillStyle(0x000000, 0.5); c.bar.fillRect(c.x - w / 2, c.y - 34, w, 4);
+        c.bar.fillStyle(0x6bff9e, 1); c.bar.fillRect(c.x - w / 2, c.y - 34, w * (c.hp / c.hpMax), 4);
+      }
+    }
+    // nearest catchable (low hp, near avatar)
+    let best: Critter | null = null, bd = 90;
+    for (const c of this.critters) {
+      if (c.dead || c.hp > c.hpMax * 0.4) continue;
+      const d = Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, c.x, c.y);
+      if (d < bd) { bd = d; best = c; }
+    }
+    this.catchableCritter = best;
+  }
+
+  private weakenCritters() {
+    // nearby player units chip away at wild creatures (never killing) so they can be caught
+    for (const c of this.critters) {
+      if (c.dead || c.hp <= c.hpMax * 0.2) continue;
+      const attacker = this.nearestPlayerUnit(c.x, c.y, 60);
+      if (attacker && Math.random() < 0.12) {
+        this.damageCritter(c, attacker.dmg * 0.8);
+      }
+    }
+  }
+
+  private nearestPlayerUnit(x: number, y: number, maxD: number): Fighter | null {
+    let best: Fighter | null = null, bd = maxD;
+    for (const f of [...this.units, this.avatar]) {
+      if (f.dead) continue;
+      const d = Phaser.Math.Distance.Between(x, y, f.x, f.y);
+      if (d < bd) { bd = d; best = f; }
+    }
+    return best;
+  }
+
+  private damageCritter(c: Critter, dmg: number) {
+    if (c.dead) return;
+    c.hp = Math.max(1, c.hp - dmg); // never kill — must be caught
+    this.burst(c.x, c.y - 14, Phaser.Display.Color.HexStringToColor(speciesById(c.speciesId).color).color, 3);
+  }
+
+  private attemptCatch() {
+    const c = this.catchableCritter;
+    if (!c || c.dead) { this.log("NOTHING TO CATCH HERE", "sys"); return; }
+    if (this.plt.l < 15) { this.log("NEED 15 LOVE for a Soul Lure", "bad"); sfx.error(); return; }
+    this.plt.l -= 15;
+    const sp = speciesById(c.speciesId);
+    const hpFactor = 1 - c.hp / c.hpMax;
+    const ascBonus = this.factionRep.ascended >= 500 ? 0.15 : 0;
+    const chance = Math.min(0.95, 0.35 + hpFactor * 0.55 - sp.rarity * 0.06 + ascBonus);
+    if (Math.random() < chance) {
+      this.capture(c, sp);
+    } else {
+      this.log(`${sp.name} broke free of the Soul Lure!`, "bad");
+      this.pushTicker(`${sp.name} escaped`, "bad");
+      c.fleeing = true;
+      sfx.error();
+    }
+  }
+
+  private capture(c: Critter, sp: ReturnType<typeof speciesById>) {
+    c.dead = true;
+    this.tweens.add({ targets: c.sprite, alpha: 0, scaleX: 0.2, scaleY: 0.2, duration: 350, onComplete: () => { c.sprite.destroy(); c.bar.clear(); } });
+    this.capturedTotal++;
+    const owned: OwnedCreature = { uid: this.nextCreatureUid++, speciesId: sp.id, level: c.level, xp: 0 };
+    if (this.party.length < 6) this.party.push(owned);
+    else this.storageCreatures.push(owned);
+    this.addRep("ascended", 12);
+    this.gainXp(20 + c.level * 2);
+    this.log(`CAUGHT ${sp.name} (Lv.${c.level})!`, "good");
+    this.pushTicker(`caught ${sp.name} Lv.${c.level}`, "good");
+    this.burst(c.x, c.y - 20, 0xb58cff, 18);
+    sfx.catch();
+    this.syncParty();
+  }
+
+  private syncParty() {
+    // remove stale sprites
+    for (const ps of this.partySprites) { if (ps.sprite) ps.sprite.destroy(); }
+    this.partySprites = [];
+    // spawn a companion sprite per party member following the avatar
+    this.party.slice(0, 6).forEach((oc, i) => {
+      const sp = speciesById(oc.speciesId);
+      const ang = (i / 6) * Math.PI * 2;
+      const sprite = this.add.image(this.avatar.x + Math.cos(ang) * 46, this.avatar.y + Math.sin(ang) * 30, `critter_${sp.shape}`)
+        .setOrigin(0.5, 1).setTint(Phaser.Display.Color.HexStringToColor(sp.color).color).setDepth(24).setScale(0.85);
+      this.partySprites.push({ uid: oc.uid, sprite, fighter: null });
+    });
+  }
+
+  private updateParty(dt: number) {
+    // companions orbit/follow the avatar and auto-fight nearby bugs
+    this.partySprites.forEach((ps, i) => {
+      if (!ps.sprite || !ps.sprite.active) return;
+      const ang = (i / Math.max(1, this.partySprites.length)) * Math.PI * 2 + this.time.now / 1400;
+      const tx = this.avatar.x + Math.cos(ang) * 52, ty = this.avatar.y + Math.sin(ang) * 34;
+      ps.sprite.x += (tx - ps.sprite.x) * Math.min(1, dt * 3);
+      ps.sprite.y += (ty - ps.sprite.y) * Math.min(1, dt * 3);
+      const cc = isoToCart(ps.sprite.x, ps.sprite.y);
+      ps.sprite.setDepth(cc.row + cc.col + 0.66);
+    });
+    // party deals passive damage to nearest bug
+    if (this.party.length && Math.random() < dt * 2) {
+      const bug = this.nearestEnemyTo(this.avatar.x, this.avatar.y, 160);
+      if (bug) {
+        const lead = creatureStats(this.party[0]);
+        this.damageFighter(bug, lead.atk, "player");
+        const ps = this.partySprites[0];
+        if (ps?.sprite) this.burst(ps.sprite.x, ps.sprite.y - 16, 0xb58cff, 4);
+      }
+    }
+    // grant xp to lead creature on nearby kills (handled in kill hook via gainXp)
+    for (const oc of this.party) {
+      oc.xp += dt * 1.2;
+      while (oc.xp >= xpForLevel(oc.level)) {
+        oc.xp -= xpForLevel(oc.level);
+        oc.level++;
+        const sp = speciesById(oc.speciesId);
+        if (sp.evolveTo && oc.level >= sp.evolveLevel) {
+          const nxt = speciesById(sp.evolveTo);
+          oc.speciesId = nxt.id;
+          this.log(`${sp.name} EVOLVED into ${nxt.name}!`, "good");
+          this.pushTicker(`${sp.name} → ${nxt.name}`, "good");
+          this.addRep("ascended", 25);
+          sfx.evolve();
+          this.syncParty();
+        }
+      }
+    }
+  }
+
+  private nearestEnemyTo(x: number, y: number, maxD: number): Fighter | null {
+    let best: Fighter | null = null, bd = maxD;
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const d = Phaser.Math.Distance.Between(x, y, e.x, e.y);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+
+  // ═══════════════════════════ RPG :: XP / FACTIONS ═══════════════════
+  private gainXp(amt: number) {
+    this.playerXp += amt;
+    while (this.playerXp >= xpForLevel(this.playerLevel)) {
+      this.playerXp -= xpForLevel(this.playerLevel);
+      this.playerLevel++;
+      this.plt.p += 50; this.plt.l += 25;
+      this.log(`COMMANDER LEVEL ${this.playerLevel} :: +50P +25L`, "good");
+      this.pushTicker(`reached level ${this.playerLevel}`, "good");
+      sfx.levelup();
+      bridge.emit("flash", { color: "rgba(181,140,255,0.25)" });
+    }
+  }
+
+  private addRep(id: FactionId, amt: number) {
+    const before = factionTier(this.factionRep[id]);
+    this.factionRep[id] = Math.max(0, this.factionRep[id] + amt);
+    const after = factionTier(this.factionRep[id]);
+    if (after !== before) {
+      this.log(`${FACTION_DEFS[id].name} :: ${after} (${FACTION_DEFS[id].perk})`, "good");
+      this.pushTicker(`${FACTION_DEFS[id].name} → ${after}`, "good");
+    }
+  }
+
+  private armyPower() {
+    let pw = 0;
+    for (const f of this.units) if (!f.dead) pw += f.dmg + f.hpMax / 12;
+    for (const oc of this.party) pw += creatureStats(oc).atk + creatureStats(oc).hp / 14;
+    return Math.round(pw);
+  }
+
+  // ═══════════════════════════ RPG :: TOWER ═══════════════════════════
+  private towerAscend() {
+    if (this.towerTier >= TOWER_TIERS.length) { this.log("THE SOUL TIER IS COMPLETE", "sys"); return; }
+    const floorPw = towerFloorPower(this.towerTier, this.towerFloor);
+    const pw = this.armyPower();
+    const chance = Math.min(0.95, Math.max(0.1, pw / (pw + floorPw)));
+    if (Math.random() < chance) {
+      const isBoss = this.towerFloor === TOWER_FLOORS;
+      const rewardP = 40 + this.towerTier * 30 + this.towerFloor * 8;
+      this.plt.p += rewardP;
+      this.gainXp(25 + this.towerTier * 15);
+      this.addRep("forge", 10);
+      this.towerCleared++;
+      this.log(`TOWER :: ${TOWER_TIERS[this.towerTier]} F${this.towerFloor} cleared! +${rewardP}P`, "good");
+      this.pushTicker(`cleared ${TOWER_TIERS[this.towerTier]} F${this.towerFloor}`, "good");
+      sfx.coin();
+      if (isBoss) {
+        this.towerTier++; this.towerFloor = 1;
+        if (this.towerTier < TOWER_TIERS.length) {
+          this.log(`PROMOTED TO ${TOWER_TIERS[this.towerTier]} TIER!`, "good");
+          this.pushTicker(`promoted to ${TOWER_TIERS[this.towerTier]}`, "good");
+          bridge.emit("flash", { color: "rgba(255,194,77,0.3)" });
+        }
+      } else {
+        this.towerFloor++;
+      }
+    } else {
+      this.log(`TOWER :: repelled at ${TOWER_TIERS[this.towerTier]} F${this.towerFloor}. Train harder.`, "bad");
+      this.pushTicker(`repelled at ${TOWER_TIERS[this.towerTier]} F${this.towerFloor}`, "bad");
+      sfx.error();
+    }
+  }
+
+  private towerReset() {
+    this.towerTier = 0; this.towerFloor = 1; this.towerCleared = 0;
+    this.log("TOWER RESET :: back to Clay", "sys");
+  }
+
+  // ═══════════════════════════ RPG :: SOUL HOMES ══════════════════════
+  private nearOwnedHome(): boolean {
+    for (const b of this.buildings) {
+      if (b.kind !== "house" || b.owner !== "player" || b.destroyed) continue;
+      if (Phaser.Math.Distance.Between(this.avatar.x, this.avatar.y, b.sx, b.sy) < 110) return true;
+    }
+    return false;
+  }
+
+  // ═══════════════════════════ RPG :: DAY CYCLE / TICKER ══════════════
+  private dayPhase(): "day" | "dusk" | "night" | "dawn" {
+    const t = (this.dayClock % 240) / 240;
+    if (t < 0.5) return "day";
+    if (t < 0.62) return "dusk";
+    if (t < 0.88) return "night";
+    return "dawn";
+  }
+
+  private pushTicker(msg: string, tone: string) {
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
+    this.ticker.unshift({ t: ts, msg, tone });
+    if (this.ticker.length > 30) this.ticker.pop();
+    bridge.emit("ticker", { t: ts, msg, tone });
+  }
+
+  private jumpAvatar() {
+    if (this.avatar.dead) return;
+    this.tweens.add({
+      targets: this.player, y: this.player.y - 26, duration: 160, yoyo: true, ease: "Sine.easeOut",
+    });
+    this.burst(this.avatar.x, this.avatar.y, 0x9fdcff, 5);
+    sfx.blip();
+  }
+
+  private grantReward(r: { p?: number; l?: number; xp?: number; rep?: { id: FactionId; amt: number } }) {
+    if (r.p) this.plt.p += r.p;
+    if (r.l) this.plt.l += r.l;
+    if (r.xp) this.gainXp(r.xp);
+    if (r.rep) this.addRep(r.rep.id, r.rep.amt);
   }
 
   shutdown() {
