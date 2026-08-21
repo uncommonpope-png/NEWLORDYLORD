@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { bridge } from "../game/bridge";
 import type { PltSnapshot, RegionId, FactionId } from "../game/bridge";
 import {
@@ -330,7 +331,7 @@ export function SoulHomePanel({ snap, onClose }: { snap: PltSnapshot; onClose: (
 }
 
 // ── shared shell ─────────────────────────────────────────────────────
-function PanelShell({ title, sub, onClose, accent, children }: { title: string; sub: string; onClose: () => void; accent: string; children: React.ReactNode }) {
+function PanelShell({ title, sub, onClose, accent, children }: { title: string; sub: string; onClose: () => void; accent: string; children: ReactNode }) {
   return (
     <div className="absolute inset-0 z-30 bg-[rgba(2,4,10,0.6)] backdrop-blur-[3px] flex items-center justify-center p-6" onClick={onClose}>
       <div className="holo-panel w-[640px] max-w-full max-h-[84vh] flex flex-col rise-in" onClick={(e) => e.stopPropagation()}>

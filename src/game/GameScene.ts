@@ -56,6 +56,7 @@ interface Fighter {
   loot: number;
   ranged: boolean;
   sprite: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Image;
   bar: Phaser.GameObjects.Graphics;
   barY: number;
   ring: Phaser.GameObjects.Image | null;
@@ -153,6 +154,23 @@ interface SoulHome {
 
 interface GardenPlotState { seed: string | null; plantedAt: number; watered: boolean; ready: boolean; }
 
+// ── world dressing :: pedestrians & ambient motes ────────────────────
+interface Ped {
+  sprite: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Image;
+  x: number; y: number;
+  tx: number; ty: number;
+  wait: number;
+  speed: number;
+  bobSeed: number;
+}
+
+interface Mote {
+  sprite: Phaser.GameObjects.Image;
+  vx: number; vy: number;
+  life: number;
+}
+
 export class GameScene extends Phaser.Scene {
   // world
   private solids: boolean[][] = [];
@@ -209,6 +227,12 @@ export class GameScene extends Phaser.Scene {
   private plots: { c: number; r: number; claimed: boolean; houseType?: HouseId }[] = [];
   private nodes: ResNode[] = [];
   private gleanerHinted = false;
+
+  // world dressing
+  private landmarks: Phaser.GameObjects.Image[] = [];
+  private civilians: Ped[] = [];
+  private motes: Mote[] = [];
+  private tintRect: Phaser.GameObjects.Graphics | null = null;
   private auditTimer = 45;
   private audits = 0;
   private depositsPlt = 0;
@@ -293,10 +317,19 @@ export class GameScene extends Phaser.Scene {
     this.critters = []; this.critterTimer = 2; this.catchableCritter = null;
     this.dayClock = 0; this.soulHomes = {}; this.ticker = [];
     this.joyVec = { x: 0, y: 0 }; this.sprinting = false;
+    for (const lm of this.landmarks) lm.destroy();
+    this.landmarks = [];
+    for (const ped of this.civilians) { ped.sprite.destroy(); ped.shadow.destroy(); }
+    this.civilians = [];
+    for (const m of this.motes) m.sprite.destroy();
+    this.motes = [];
+    if (this.tintRect) { this.tintRect.destroy(); this.tintRect = null; }
 
     this.buildVoid();
     this.buildGround();
     this.buildProps();
+    this.buildLandmarks();
+    this.buildCivilians();
     this.buildBarrier();
     this.buildTerminal();
     this.buildCitadels();
@@ -372,8 +405,16 @@ export class GameScene extends Phaser.Scene {
     return g;
   }
 
+  private isWater(c: number, r: number): boolean {
+    // the Delta lake in the Nomad west
+    return ((c - 7) / 5) ** 2 + ((r - 21) / 3.4) ** 2 <= 1;
+  }
+
   private buildGround() {
     const CX = GRID / 2, CY = GRID / 2;
+    const REGION_TINT: Record<RegionId, number> = {
+      genesis: 0xffffff, forge: 0xffe0c0, syndicate: 0xcfeaff, nomad: 0xfff0c8, hollows: 0xd8f0d0, sanctum: 0xe8dcff,
+    };
     for (let r = -1; r <= GRID; r++) {
       for (let c = -1; c <= GRID; c++) {
         const pos = cartToIso(c, r);
@@ -382,12 +423,21 @@ export class GameScene extends Phaser.Scene {
         const dist = Math.sqrt((c - CX) * (c - CX) + (r - CY) * (r - CY));
         let tex = "grass";
         if (ring) tex = "void";
+        else if (this.isWater(c, r)) tex = "water";
         else if (dist > 16.5) tex = (c * 7 + r * 13) % 9 === 0 ? "grass3" : (c + r) % 2 === 0 ? "grass2" : "grass3"; // the Wilds
         else if (r === 19 && c >= 9 && c <= 31) tex = "path";
         else if (c === 19 && r >= 9 && r <= 31) tex = "path";
         else if ((c + r * 3) % 7 === 0) tex = "grass2";
         else if ((c * 5 + r) % 11 === 0) tex = "grass3";
         const img = this.add.image(pos.x, pos.y, tex).setDepth(r + c - 10);
+        if (inGrid && tex !== "water" && tex !== "void" && tex !== "path") {
+          img.setTint(REGION_TINT[this.regionAt(c, r)]);
+        }
+        if (tex === "water") {
+          this.markSolid(c, r);
+          img.setAlpha(0.92);
+          this.tweens.add({ targets: img, alpha: { from: 0.85, to: 0.97 }, duration: 1800 + ((c * 13 + r * 7) % 900), yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        }
         this.groundTiles.push(img);
       }
     }
@@ -443,6 +493,112 @@ export class GameScene extends Phaser.Scene {
       const beacon = this.add.image(p.x, p.y - 30, "glow").setTint(0x3af5ff).setBlendMode(Phaser.BlendModes.ADD).setScale(0.8).setDepth(501);
       this.tweens.add({ targets: beacon, scale: { from: 0.6, to: 1 }, alpha: { from: 0.8, to: 0.3 }, duration: 1400, yoyo: true, repeat: -1 });
     }
+  }
+
+  // ── landmarks :: one per region ────────────────────────────────────
+  private buildLandmarks() {
+    const spots: { c: number; r: number; tex: string; glow: number }[] = [
+      { c: 12, r: 6, tex: "landmark_obelisk", glow: 0xff8b3e },   // forge (north)
+      { c: 42, r: 22, tex: "landmark_arch", glow: 0xff3ec8 },     // syndicate (east)
+      { c: 30, r: 44, tex: "landmark_pyramid", glow: 0xffd977 },  // hollows (south)
+      { c: 6, r: 30, tex: "landmark_crystal", glow: 0xb58cff },   // nomad (west)
+      { c: 46, r: 46, tex: "landmark_spire", glow: 0xffd977 },    // sanctum (SE corner)
+      { c: 20, r: 14, tex: "landmark_monolith", glow: 0x3af5ff }, // genesis capital
+    ];
+    for (const s of spots) {
+      const p = cartToIso(s.c, s.r);
+      const lm = this.add.image(p.x, p.y - 2, s.tex).setOrigin(0.5, 1).setDepth(s.r + s.c + 0.5);
+      const glow = this.add.image(p.x, p.y - 60, "glow").setDepth(s.r + s.c + 0.45)
+        .setTint(s.glow).setBlendMode(Phaser.BlendModes.ADD).setScale(1.3).setAlpha(0.5);
+      this.tweens.add({ targets: glow, alpha: { from: 0.3, to: 0.7 }, duration: 1900 + s.c * 31, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.landmarks.push(lm);
+      this.markSolid(s.c, s.r);
+      this.markSolid(s.c + 1, s.r); this.markSolid(s.c, s.r + 1);
+    }
+  }
+
+  // ── civilians :: wandering pedestrians with routines ───────────────
+  private buildCivilians() {
+    const tints = [0x9fdcff, 0xffc24d, 0xff5ad1, 0x6bff9e, 0xb58cff, 0xff8b3e];
+    const homes = [
+      { c: 15, r: 17 }, { c: 24, r: 18 }, { c: 17, r: 24 }, { c: 23, r: 23 },
+      { c: 20, r: 16 }, { c: 16, r: 21 }, { c: 25, r: 21 }, { c: 21, r: 25 },
+    ];
+    for (let i = 0; i < 8; i++) {
+      const h = homes[i];
+      const p = cartToIso(h.c + 0.5, h.r + 0.5);
+      const shadow = this.add.image(p.x, p.y + 2, "shadow").setOrigin(0.5, 0.5).setDepth(20.1).setScale(0.6).setAlpha(0.5);
+      const sprite = this.add.image(p.x, p.y, "civilian").setOrigin(0.5, 1).setDepth(20.5).setTint(tints[i % tints.length]).setScale(0.9);
+      this.civilians.push({
+        sprite, shadow, x: p.x, y: p.y, tx: p.x, ty: p.y,
+        wait: Phaser.Math.FloatBetween(0, 3), speed: Phaser.Math.FloatBetween(26, 40), bobSeed: Math.random() * 100,
+      });
+    }
+  }
+
+  private updateCivilians(dt: number) {
+    const night = this.dayPhase() === "night";
+    for (const ped of this.civilians) {
+      if (ped.wait > 0) { ped.wait -= dt; continue; }
+      const d = Phaser.Math.Distance.Between(ped.x, ped.y, ped.tx, ped.ty);
+      const sp = ped.speed * (night ? 0.5 : 1);
+      if (d < 5) {
+        // arrived — pause, then pick a new wander target near the capital
+        ped.wait = Phaser.Math.FloatBetween(1.5, 5);
+        const nc = Phaser.Math.Between(13, 27), nr = Phaser.Math.Between(13, 27);
+        if (!this.solids[nr]?.[nc]) {
+          const p = cartToIso(nc + 0.5, nr + 0.5);
+          ped.tx = p.x; ped.ty = p.y;
+        }
+        continue;
+      }
+      ped.x += ((ped.tx - ped.x) / d) * sp * dt;
+      ped.y += ((ped.ty - ped.y) / d) * sp * dt;
+      const bob = Math.sin(this.time.now / 200 + ped.bobSeed) * 1.4;
+      ped.sprite.setPosition(ped.x, ped.y + bob);
+      ped.shadow.setPosition(ped.x, ped.y + 2);
+      ped.sprite.setFlipX(ped.tx < ped.x);
+      ped.sprite.setAlpha(night ? 0.55 : 0.95);
+      const cc = isoToCart(ped.x, ped.y);
+      ped.sprite.setDepth(cc.row + cc.col + 0.65);
+      ped.shadow.setDepth(cc.row + cc.col + 0.12);
+    }
+  }
+
+  // ── atmosphere :: day/night tint + ambient motes ───────────────────
+  private updateAtmosphere(dt: number) {
+    // day/night full-screen tint
+    if (!this.tintRect) this.tintRect = this.add.graphics().setScrollFactor(0).setDepth(1300);
+    const g = this.tintRect;
+    g.clear();
+    const phase = this.dayPhase();
+    const tint =
+      phase === "night" ? { c: 0x0a1440, a: 0.34 } :
+      phase === "dusk" ? { c: 0x5e2a14, a: 0.16 } :
+      phase === "dawn" ? { c: 0x3a2a5e, a: 0.12 } : { c: 0x000000, a: 0 };
+    if (tint.a > 0) {
+      g.fillStyle(tint.c, tint.a);
+      g.fillRect(0, 0, this.scale.width, this.scale.height);
+    }
+    // ambient motes colored by current region
+    const REGION_MOTE: Record<RegionId, number> = {
+      genesis: 0x3af5ff, forge: 0xff8b3e, syndicate: 0xff3ec8, nomad: 0xffd977, hollows: 0x6bff9e, sanctum: 0xb58cff,
+    };
+    if (this.motes.length < 26 && Math.random() < dt * 8) {
+      const cam = this.cameras.main;
+      const wx = cam.scrollX + Math.random() * cam.width / cam.zoom;
+      const wy = cam.scrollY + Math.random() * cam.height / cam.zoom;
+      const sprite = this.add.image(wx, wy, "glow").setDepth(905).setScale(0.16)
+        .setTint(REGION_MOTE[this.region]).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.7);
+      this.motes.push({ sprite, vx: Phaser.Math.FloatBetween(-8, 8), vy: Phaser.Math.FloatBetween(-16, -6), life: Phaser.Math.FloatBetween(2, 4) });
+    }
+    for (const m of this.motes) {
+      m.life -= dt;
+      m.sprite.x += m.vx * dt; m.sprite.y += m.vy * dt;
+      m.sprite.setAlpha(Math.max(0, Math.min(0.7, m.life / 2)));
+      if (m.life <= 0) { m.sprite.destroy(); }
+    }
+    this.motes = this.motes.filter((m) => m.life > 0);
   }
 
   private buildTerminal() {
@@ -1318,12 +1474,13 @@ export class GameScene extends Phaser.Scene {
     hp: number; hpMax: number; dmg: number; range: number; atkCd: number;
     speed: number; radius: number; loot: number; ranged: boolean; tex: string; barY: number;
   }): Fighter {
+    const shadow = this.add.image(cfg.x, cfg.y + 2, "shadow").setOrigin(0.5, 0.5).setDepth(19.5).setAlpha(0.7);
     const sprite = this.add.image(cfg.x, cfg.y, cfg.tex).setOrigin(0.5, 1).setDepth(20);
     return {
       id: this.nextId++, side: cfg.side, kind: cfg.kind, name: cfg.name,
       x: cfg.x, y: cfg.y, hp: cfg.hp, hpMax: cfg.hpMax, dmg: cfg.dmg, range: cfg.range,
       atkCdMax: cfg.atkCd, atkCd: 0, speed: cfg.speed, radius: cfg.radius, loot: cfg.loot,
-      ranged: cfg.ranged, sprite, bar: this.add.graphics().setDepth(998), barY: cfg.barY,
+      ranged: cfg.ranged, sprite, shadow, bar: this.add.graphics().setDepth(998), barY: cfg.barY,
       ring: null, order: null, targetF: null, targetB: null,
       frozen: 0, invuln: 0, slow: 0, marked: 0, flash: 0, bobSeed: Math.random() * 100, dead: false, hpDirty: true,
       worker: false, cargo: 0, cargoKind: "p", gatherId: null, gState: "idle", mineT: 0,
@@ -1396,8 +1553,10 @@ export class GameScene extends Phaser.Scene {
     f.dead = true;
     if (f.kind === "avatar") {
       f.sprite.setVisible(false); // avatar respawns — keep the image alive
+      f.shadow.setVisible(false);
     } else {
       f.sprite.destroy();
+      f.shadow.destroy();
     }
     f.bar.clear();
     if (f.ring) { f.ring.destroy(); f.ring = null; }
@@ -1623,7 +1782,9 @@ export class GameScene extends Phaser.Scene {
       this.weakenCritters();
       this.updateCritters(dt);
       this.updateParty(dt);
+      this.updateCivilians(dt);
     }
+    this.updateAtmosphere(rawDt);
     this.updatePrompts();
     this.updateCamera(rawDt);
     if (this.time.now % 2 < 1.2) this.pushSnapshot();
@@ -1664,6 +1825,7 @@ export class GameScene extends Phaser.Scene {
           this.avatar.invuln = 2.5;
           this.avatar.targetF = null; this.avatar.targetB = null; this.avatar.order = null;
           this.player.setVisible(true);
+          this.avatar.shadow.setVisible(true);
           this.player.setPosition(rally.x, rally.y);
           this.burst(rally.x, rally.y - 16, 0x3af5ff, 14);
           sfx.prod();
@@ -1902,9 +2064,11 @@ export class GameScene extends Phaser.Scene {
       // render
       const bob = Math.sin(this.time.now / 260 + f.bobSeed) * 1.6;
       f.sprite.setPosition(f.x, f.y + bob);
+      f.shadow.setPosition(f.x, f.y + 2);
       if (f.ring) f.ring.setPosition(f.x, f.y + 2);
       const cc = isoToCart(f.x, f.y);
       f.sprite.setDepth(cc.row + cc.col + 0.7);
+      f.shadow.setDepth(cc.row + cc.col + 0.1);
       if (f.ring) f.ring.setDepth(cc.row + cc.col + 0.2);
       // hp bar
       if (f.hpDirty || f.hp < f.hpMax) {

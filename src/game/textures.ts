@@ -329,6 +329,99 @@ export function createTextures(scene: Phaser.Scene) {
     g.fillStyle(0x0a0f1e, 0.35); g.fillPoints([P(16, 8), P(23, 13), P(16, 20), P(9, 13)], true);
     g.fillStyle(0x0a0f1e, 1); g.fillCircle(12, 13, 2); g.fillCircle(20, 13, 2);
   });
+  // ── world dressing :: shadows, civilians, water, landmarks ─────────
+  make("shadow", 48, 20, (g) => {
+    g.fillStyle(0x000000, 0.32);
+    g.fillEllipse(24, 10, 40, 14);
+    g.fillStyle(0x000000, 0.2);
+    g.fillEllipse(24, 10, 30, 10);
+  });
+
+  make("civilian", 28, 38, (g) => {
+    diamond(g, 14, 36, 18, 8, "#000000", 0.25);
+    g.fillStyle(0x2a3450, 1); g.fillRect(9, 18, 10, 14);          // coat
+    g.fillStyle(0x3d4a70, 1); g.fillRect(9, 18, 10, 4);           // shoulders
+    g.fillStyle(0xd8c8a8, 1); g.fillCircle(14, 13, 5.5);          // head
+    g.fillStyle(0x5e4a3d, 1); g.fillCircle(14, 10.5, 5);          // hood/hair
+    g.fillStyle(0x1a2038, 1); g.fillRect(10, 30, 3, 5); g.fillRect(15, 30, 3, 5); // legs
+  });
+
+  make("water", 64, 32, (g) => {
+    diamond(g, 32, 16, 64, 32, "#0a2c4a", 1);
+    g.lineStyle(1.4, 0x3af5ff, 0.5);
+    g.lineBetween(14, 14, 26, 14); g.lineBetween(34, 19, 50, 19); g.lineBetween(22, 23, 34, 23);
+    g.lineStyle(1, 0x9fdcff, 0.3);
+    g.lineBetween(40, 10, 50, 10); g.lineBetween(12, 19, 20, 19);
+  });
+
+  make("landmark_obelisk", 56, 110, (g) => {
+    diamond(g, 28, 102, 44, 20, "#1a0f0a", 0.9);
+    g.fillStyle(0x14100c, 1);
+    g.fillPoints([P(18, 100), P(38, 100), P(33, 8), P(23, 8)], true);
+    g.fillStyle(0x2a2018, 1);
+    g.fillPoints([P(28, 100), P(38, 100), P(33, 8), P(28, 8)], true);
+    g.fillStyle(0xff8b3e, 0.95);
+    g.fillRect(25, 20, 2, 12); g.fillRect(29, 42, 2, 16); g.fillRect(24, 70, 2, 10);
+    g.fillStyle(0xffc24d, 1); g.fillTriangle(23, 8, 33, 8, 28, 0);
+  });
+
+  make("landmark_pyramid", 96, 84, (g) => {
+    diamond(g, 48, 76, 88, 40, "#3d2f14", 0.9);
+    g.fillStyle(0x8e7040, 1);
+    g.fillPoints([P(10, 72), P(48, 84), P(48, 18)], true);
+    g.fillStyle(0x5e4a28, 1);
+    g.fillPoints([P(86, 72), P(48, 84), P(48, 18)], true);
+    g.fillStyle(0xc9a860, 1); g.fillTriangle(40, 32, 56, 32, 48, 18);
+    g.fillStyle(0xffd977, 1); g.fillCircle(48, 18, 3.5);
+    g.lineStyle(1, 0x3d2f14, 0.8);
+    g.lineBetween(24, 60, 66, 60); g.lineBetween(32, 46, 60, 46);
+  });
+
+  make("landmark_arch", 84, 96, (g) => {
+    g.fillStyle(0x0e1c3d, 1);
+    g.fillRect(10, 20, 10, 72); g.fillRect(64, 20, 10, 72);
+    g.fillRect(4, 12, 76, 10); g.fillRect(10, 28, 64, 6);
+    g.fillStyle(0xff3ec8, 1);
+    g.fillRect(4, 10, 76, 3); g.fillRect(12, 26, 60, 2);
+    g.fillStyle(0x3af5ff, 0.9);
+    g.fillRect(13, 34, 4, 4); g.fillRect(67, 34, 4, 4);
+    g.fillStyle(0xff3ec8, 0.35); g.fillCircle(42, 52, 14);
+    g.fillStyle(0xff3ec8, 1); g.fillCircle(42, 52, 5);
+  });
+
+  make("landmark_crystal", 72, 100, (g) => {
+    diamond(g, 36, 92, 60, 26, "#1a0f2a", 0.9);
+    const shard = (x: number, y: number, w: number, h: number) => {
+      g.fillStyle(0x3d2a5e, 1);
+      g.fillPoints([P(x, y), P(x + w, y + h * 0.4), P(x, y + h), P(x - w, y + h * 0.4)], true);
+      g.fillStyle(0xb58cff, 0.95);
+      g.fillPoints([P(x, y), P(x + w * 0.4, y + h * 0.4), P(x, y + h), P(x - w * 0.25, y + h * 0.4)], true);
+    };
+    shard(36, 6, 12, 66); shard(20, 34, 8, 46); shard(52, 30, 9, 50);
+    g.fillStyle(0xe6dcff, 0.9); g.fillRect(34, 14, 2, 8); g.fillRect(51, 40, 2, 6);
+  });
+
+  make("landmark_spire", 60, 120, (g) => {
+    g.fillStyle(0xf5f0ff, 0.95);
+    g.fillPoints([P(22, 112), P(38, 112), P(34, 20), P(26, 20)], true);
+    g.fillStyle(0xcfc4f0, 1);
+    g.fillPoints([P(30, 112), P(38, 112), P(34, 20), P(30, 20)], true);
+    g.fillStyle(0xffd977, 1); g.fillTriangle(26, 20, 34, 20, 30, 6);
+    g.lineStyle(2, 0xffd977, 0.9); g.strokeCircle(30, 60, 16);
+    g.fillStyle(0xffd977, 0.3); g.fillCircle(30, 60, 16);
+    g.fillStyle(0xb58cff, 0.9); g.fillCircle(30, 6, 3.5);
+  });
+
+  make("landmark_monolith", 64, 104, (g) => {
+    diamond(g, 32, 98, 52, 22, "#141a2a", 0.95);
+    isoBox(g, 32, 96, 40, 52, "#2a3450");
+    isoBox(g, 32, 44, 32, 30, "#3d4a70");
+    isoBox(g, 32, 14, 22, 18, "#5e6ea0");
+    g.fillStyle(0x3af5ff, 0.95); g.fillCircle(32, 10, 4);
+    g.fillStyle(0x3af5ff, 0.3); g.fillCircle(32, 10, 9);
+    g.fillStyle(0xffc24d, 1); g.fillRect(26, 66, 12, 2); g.fillRect(26, 74, 12, 2);
+  });
+
   make("critter_wisp", 26, 30, (g) => {
     g.fillStyle(0xffffff, 0.9); g.fillCircle(13, 11, 8);
     g.fillStyle(0xffffff, 0.5);

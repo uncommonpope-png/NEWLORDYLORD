@@ -140,7 +140,10 @@ export function BootScreen({ onStart }: { onStart: () => void }) {
               <CtrlRow keys={["R"]} desc="rally ALL armies on the nearest citadel" />
               <CtrlRow keys={["Q", "X", "F"]} desc="attack-move / stop / follow" />
               <CtrlRow keys={["V", "`"]} desc="3D command center / GSK shell" />
-              <CtrlRow keys={["E"]} desc="market terminal / A2A handshake" />
+              <CtrlRow keys={["E"]} desc="market terminal / soul home / handshake" />
+              <CtrlRow keys={["C"]} desc="catch a weakened wild creature (15 L)" />
+              <CtrlRow keys={["SPACE", "SHIFT"]} desc="jump / sprint" />
+              <CtrlRow keys={["P", "I", "O", "L"]} desc="dashboard / creatures / factions / tower" />
               <CtrlRow keys={["ESC", "SCROLL", "M"]} desc="pause / zoom / mute" />
             </div>
           </div>

@@ -91,6 +91,8 @@ export default function App() {
       if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "TEXTAREA")) return;
       if (e.key === "Escape") {
         if (terminalOpen) { setTerminalOpen(false); gameCommand("terminal", false); }
+        else if (panel) setPanel(null);
+        else if (homeOpen) setHomeOpen(false);
         else if (shellOpen) setShellOpen(false);
         else if (view === "command") setView("arena");
         return;
@@ -109,10 +111,20 @@ export default function App() {
         setShellOpen((s) => !s);
         sfx.blip();
       }
+      // RPG panels :: P dashboard · I creatures · O factions · L tower
+      if (screen === "game" && !ended && !paused && !terminalOpen && !shellOpen && view === "arena") {
+        const keyPanel: Record<string, PanelId> = { p: "dashboard", i: "creatures", o: "factions", l: "tower" };
+        const k = e.key.toLowerCase();
+        if (k in keyPanel) {
+          setPanel((cur) => (cur === keyPanel[k] ? null : keyPanel[k]));
+          setHomeOpen(false);
+          sfx.blip();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [terminalOpen, shellOpen, view, screen, ended, paused, gameCommand]);
+  }, [terminalOpen, shellOpen, panel, homeOpen, view, screen, ended, paused, gameCommand]);
 
   const reboot = () => {
     setSnap(null);
@@ -206,6 +218,31 @@ export default function App() {
       {/* GSK operator shell */}
       {screen === "game" && view === "arena" && shellOpen && !ended && !paused && (
         <TerminalShell onClose={() => setShellOpen(false)} />
+      )}
+
+      {/* live ticker + mobile controls */}
+      {screen === "game" && view === "arena" && !ended && (
+        <>
+          <LiveTicker />
+          <MobileControls />
+        </>
+      )}
+
+      {/* RPG panels */}
+      {screen === "game" && view === "arena" && snap && !ended && !paused && panel === "dashboard" && (
+        <DashboardPanel snap={snap} onClose={() => setPanel(null)} onOpen={(p) => setPanel(p)} />
+      )}
+      {screen === "game" && view === "arena" && snap && !ended && !paused && panel === "creatures" && (
+        <CreaturesPanel snap={snap} onClose={() => setPanel(null)} />
+      )}
+      {screen === "game" && view === "arena" && snap && !ended && !paused && panel === "factions" && (
+        <FactionsPanel snap={snap} onClose={() => setPanel(null)} />
+      )}
+      {screen === "game" && view === "arena" && snap && !ended && !paused && panel === "tower" && (
+        <TowerPanel snap={snap} onClose={() => setPanel(null)} />
+      )}
+      {screen === "game" && view === "arena" && snap && !ended && homeOpen && (
+        <SoulHomePanel snap={snap} onClose={() => setHomeOpen(false)} />
       )}
 
       {/* view chip */}
